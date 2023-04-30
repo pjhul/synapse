@@ -13,7 +13,7 @@ type Sender = UnboundedSender<Message>;
 #[derive(Clone, Debug)]
 pub struct Channel {
     pub name: String,
-    connections: Arc<Mutex<HashMap<SocketAddr, Sender>>>,
+    pub connections: Arc<Mutex<HashMap<SocketAddr, Sender>>>,
 }
 
 #[derive(Clone, Debug)]

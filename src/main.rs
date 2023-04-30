@@ -1,5 +1,3 @@
-mod channel;
-
 use std::{
     env,
     io::Error,
@@ -10,7 +8,7 @@ use log::{info, warn};
 use serde::Deserialize;
 use tokio::net::{TcpListener, TcpStream};
 
-use channel::ChannelMap;
+use synapse::channel::ChannelMap;
 use tokio_tungstenite::tungstenite::Message;
 
 #[derive(Deserialize)]
