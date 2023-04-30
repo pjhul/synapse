@@ -77,7 +77,6 @@ impl Server {
         pin_mut!(broadcast_incoming, receive_from_others);
         future::select(broadcast_incoming, receive_from_others).await;
 
-        // TODO: Remove connection from all channels
-        // connections.lock().unwrap().remove(&addr);
+        channels.remove_connection(addr);
     }
 }
