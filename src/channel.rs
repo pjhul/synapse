@@ -77,13 +77,17 @@ impl ChannelMap {
         channels.contains_key(&channel_name)
     }
 
-    pub fn broadcast(&self, channel_name: String, message: Message) {
+    pub fn broadcast(&self, channel_name: String, skip_addr: SocketAddr, message: Message) {
         let channels = self.channels.lock().unwrap();
 
         let channel = channels.get(&channel_name).unwrap();
         let connections = channel.connections.lock().unwrap();
 
         for (addr, sender) in connections.iter() {
+            if *addr == skip_addr {
+                continue;
+            }
+
             sender.unbounded_send(message.clone()).unwrap();
         }
     }
