@@ -70,7 +70,7 @@ async fn accept_connection(channels: ChannelMap, stream: TcpStream) {
 
             channels.add_channel(body.channel.clone());
             channels.add_connection(body.channel.clone(), addr, sender.clone());
-            // channels.broadcast(body.channel.clone(), Message::text(msg));
+            channels.broadcast(body.channel.clone(), Message::text(msg));
         } else {
             warn!("Received a non-text message from {}: {}", addr, msg);
         }
