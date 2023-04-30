@@ -6,10 +6,17 @@ use std::{
 };
 
 use futures_util::{future, pin_mut, StreamExt, TryStreamExt};
-use log::info;
+use log::{info, warn};
+use serde::Deserialize;
 use tokio::net::{TcpListener, TcpStream};
 
 use channel::ChannelMap;
+
+#[derive(Deserialize)]
+struct MessageBody {
+    channel: String,
+    payload: serde_json::Value,
+}
 
 #[tokio::main]
 async fn main() -> Result<(), Error> {
@@ -50,6 +57,17 @@ async fn accept_connection(channels: ChannelMap, stream: TcpStream) {
 
     let broadcast_incoming = read.try_for_each(|msg| {
         info!("Received a message from {}: {}", addr, msg);
+
+        if msg.is_text() {
+            let msg = msg.to_text().unwrap();
+
+            // TODO: Handle error better
+            let body: MessageBody = serde_json::from_str(msg).unwrap();
+
+            info!("Channel: {}", body.channel);
+        } else {
+            warn!("Received a non-text message from {}: {}", addr, msg);
+        }
 
         // Steps:
         // 1. Parse message into a channel and a payload
