@@ -51,8 +51,6 @@ impl ChannelMap {
     pub fn add_connection(&self, channel_name: String, addr: SocketAddr, sender: Sender) {
         let mut channels = self.channels.lock().unwrap();
 
-        dbg!(&channels);
-
         let channel = channels.get_mut(&channel_name).unwrap();
         let mut connections = channel.connections.lock().unwrap();
 
@@ -62,8 +60,6 @@ impl ChannelMap {
         }
 
         connections.insert(addr, sender);
-
-        dbg!(&channel);
     }
 
     pub fn remove_connection(&self, addr: SocketAddr) {
@@ -84,13 +80,10 @@ impl ChannelMap {
     pub fn broadcast(&self, channel_name: String, message: Message) {
         let channels = self.channels.lock().unwrap();
 
-        info!("{:?}", channels.keys());
-
         let channel = channels.get(&channel_name).unwrap();
         let connections = channel.connections.lock().unwrap();
 
         for (addr, sender) in connections.iter() {
-            info!("Sending message to {}", addr);
             sender.unbounded_send(message.clone()).unwrap();
         }
     }
