@@ -11,6 +11,7 @@ use serde::Deserialize;
 use tokio::net::{TcpListener, TcpStream};
 
 use channel::ChannelMap;
+use tokio_tungstenite::tungstenite::Message;
 
 #[derive(Deserialize)]
 struct MessageBody {
@@ -46,6 +47,7 @@ async fn accept_connection(channels: ChannelMap, stream: TcpStream) {
         .peer_addr()
         .expect("connected streams should have a peer address");
     info!("Incoming connection: {}", addr);
+    info!("Channels: {:?}", channels);
 
     let ws_stream = tokio_tungstenite::accept_async(stream)
         .await
@@ -65,6 +67,10 @@ async fn accept_connection(channels: ChannelMap, stream: TcpStream) {
             let body: MessageBody = serde_json::from_str(msg).unwrap();
 
             info!("Channel: {}", body.channel);
+
+            channels.add_channel(body.channel.clone());
+            channels.add_connection(body.channel.clone(), addr, sender.clone());
+            // channels.broadcast(body.channel.clone(), Message::text(msg));
         } else {
             warn!("Received a non-text message from {}: {}", addr, msg);
         }
