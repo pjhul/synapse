@@ -10,15 +10,15 @@ use tokio_tungstenite::tungstenite::Message;
 
 type Sender = UnboundedSender<Message>;
 
-// #[derive(Clone, Debug)]
-// pub struct Channel {
-//     pub name: String,
-//     connections: Arc<Mutex<>>,
-// }
+#[derive(Clone, Debug)]
+pub struct Channel {
+    pub name: String,
+    connections: Arc<Mutex<HashMap<SocketAddr, Sender>>>,
+}
 
 #[derive(Clone, Debug)]
 pub struct ChannelMap {
-    pub channels: Arc<Mutex<HashMap<String, HashMap<SocketAddr, Sender>>>>,
+    pub channels: Arc<Mutex<HashMap<String, Channel>>>,
 }
 
 impl ChannelMap {
@@ -39,7 +39,13 @@ impl ChannelMap {
         // NOTE: There seems to be weird behavior around inserting a key into a map that is
         // contained in an Arc<Mutex<>>. The key is inserted, but it seems the map itself is copied
         // in some way? The issue was fixed by checking if the key existed first.
-        channels.insert(name.clone(), HashMap::new());
+        channels.insert(
+            name.clone(),
+            Channel {
+                name: name.clone(),
+                connections: Arc::new(Mutex::new(HashMap::new())),
+            },
+        );
     }
 
     pub fn add_connection(&self, channel_name: String, addr: SocketAddr, sender: Sender) {
@@ -48,13 +54,14 @@ impl ChannelMap {
         dbg!(&channels);
 
         let channel = channels.get_mut(&channel_name).unwrap();
+        let mut connections = channel.connections.lock().unwrap();
 
-        if channel.contains_key(&addr) {
+        if connections.contains_key(&addr) {
             info!("Connection already exists for {}", addr);
             return;
         }
 
-        channel.insert(addr, sender);
+        connections.insert(addr, sender);
 
         dbg!(&channel);
     }
@@ -63,7 +70,8 @@ impl ChannelMap {
         let mut channels = self.channels.lock().unwrap();
 
         for (_, channel) in channels.iter_mut() {
-            channel.remove(&addr);
+            let mut connections = channel.connections.lock().unwrap();
+            connections.remove(&addr);
         }
     }
 
@@ -79,8 +87,9 @@ impl ChannelMap {
         info!("{:?}", channels.keys());
 
         let channel = channels.get(&channel_name).unwrap();
+        let connections = channel.connections.lock().unwrap();
 
-        for (addr, sender) in channel.iter() {
+        for (addr, sender) in connections.iter() {
             info!("Sending message to {}", addr);
             sender.unbounded_send(message.clone()).unwrap();
         }
