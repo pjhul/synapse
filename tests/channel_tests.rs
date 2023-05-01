@@ -45,6 +45,25 @@ async fn test_add_connection() {
 }
 
 #[tokio::test]
+async fn test_remove_connection() {
+    let channel_map = ChannelMap::new();
+    let channel_name = String::from("test_channel");
+    let addr = create_socket_addr();
+    let sender = create_sender();
+
+    channel_map.add_channel(&channel_name);
+    channel_map.add_connection(&channel_name, addr, sender);
+
+    channel_map.remove_connection(&channel_name, addr);
+
+    let channels = channel_map.channels.lock().unwrap();
+    let channel = channels.get(&channel_name).unwrap();
+    let connections = &channel.connections;
+
+    assert!(!connections.contains_key(&addr));
+}
+
+#[tokio::test]
 async fn test_remove_connection_from_all_channels() {
     let channel_map = ChannelMap::new();
     let channel_name = String::from("test_channel");
