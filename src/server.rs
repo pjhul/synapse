@@ -1,12 +1,26 @@
-use std::sync::Arc;
+use std::{convert::Infallible, net::SocketAddr, sync::Arc};
 
+use axum::{
+    extract::{
+        ws::{Message, WebSocket},
+        ConnectInfo, WebSocketUpgrade,
+    },
+    response::{IntoResponse, Response},
+    routing::get,
+    Router,
+};
+use futures::future::IntoStream;
 use futures_util::{future, pin_mut, StreamExt, TryStreamExt};
+use hyper::{
+    server::conn::AddrStream,
+    service::{make_service_fn, service_fn, Service},
+    Body, Request,
+};
 use log::{info, warn};
 use serde::Deserialize;
 use tokio::net::{TcpListener, TcpStream};
 
 use crate::channel::ChannelMap;
-use tokio_tungstenite::tungstenite::Message;
 
 #[derive(Deserialize)]
 struct MessageBody {
@@ -26,50 +40,57 @@ impl Server {
     }
 
     pub async fn run(self, addr: &str) {
-        let try_socket = TcpListener::bind(&addr).await;
-        let listener = try_socket.expect("Failed to bind");
         info!("Listening on: {}", addr);
 
-        while let Ok((stream, _)) = listener.accept().await {
-            let channels = self.channels.clone();
+        let app = Router::new().route("/ws", get(Self::ws_handler));
 
-            tokio::spawn(async move {
-                Server::accept_connection(channels, stream).await;
-            });
-        }
+        axum::Server::bind(&addr.parse().unwrap())
+            .serve(app.into_make_service())
+            .await
+            .unwrap();
     }
 
-    async fn accept_connection(channels: Arc<ChannelMap>, stream: TcpStream) {
-        let addr = stream
-            .peer_addr()
-            .expect("connected streams should have a peer address");
-        info!("Incoming connection: {}", addr);
+    async fn ws_handler(
+        ws: WebSocketUpgrade,
+        ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    ) -> impl IntoResponse {
+        info!("New connection from: {}", addr);
 
-        let ws_stream = tokio_tungstenite::accept_async(stream)
-            .await
-            .expect("Error during the websocket handshake occurred");
+        ws.on_upgrade(move |socket| async move {
+            // let channels = self.channels.clone();
+            let channels = Arc::new(ChannelMap::new());
 
-        let (sender, receiver) = futures_channel::mpsc::unbounded();
+            tokio::spawn(async move {
+                let addr = addr.to_owned();
+                Server::accept_connection(socket, addr, channels)
+                    .await
+                    .unwrap();
+            });
+        })
+    }
 
-        let (write, read) = ws_stream.split();
+    async fn accept_connection(
+        stream: WebSocket,
+        addr: SocketAddr,
+        channels: Arc<ChannelMap>,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let (sender, receiver) = futures_channel::mpsc::unbounded::<axum::extract::ws::Message>();
+
+        let (write, read) = stream.split();
 
         let broadcast_incoming = read.try_for_each(|msg| {
-            info!("Received a message from {}: {}", addr, msg);
-
-            if msg.is_text() {
-                let msg = msg.to_text().unwrap();
-
+            if let Ok(msg) = msg.to_text() {
                 // TODO: Handle error better
                 let body: MessageBody = serde_json::from_str(msg).unwrap();
 
                 channels.add_channel(body.channel.clone());
                 channels.add_connection(body.channel.clone(), addr, sender.clone());
-                channels.broadcast(body.channel.clone(), addr, Message::text(msg));
+                channels.broadcast(body.channel.clone(), addr, Message::Text(msg.into()));
             } else {
-                warn!("Received a non-text message from {}: {}", addr, msg);
+                warn!("Received a non-text message");
             }
 
-            future::ok(())
+            future::ready(Ok(()))
         });
 
         let receive_from_others = receiver.map(Ok).forward(write);
@@ -78,5 +99,7 @@ impl Server {
         future::select(broadcast_incoming, receive_from_others).await;
 
         channels.remove_connection(addr);
+
+        Ok(())
     }
 }

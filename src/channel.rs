@@ -6,7 +6,7 @@ use std::{
 
 use futures_channel::mpsc::UnboundedSender;
 use log::info;
-use tokio_tungstenite::tungstenite::Message;
+use axum::extract::ws::Message;
 
 type Sender = UnboundedSender<Message>;
 
