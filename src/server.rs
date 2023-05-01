@@ -62,14 +62,14 @@ impl Server {
         ws.on_upgrade(move |socket| async move {
             tokio::spawn(async move {
                 let addr = addr.to_owned();
-                Server::accept_connection(socket, addr, channels)
+                Self::handle_connection(socket, addr, channels)
                     .await
                     .unwrap();
             });
         })
     }
 
-    async fn accept_connection(
+    async fn handle_connection(
         stream: WebSocket,
         addr: SocketAddr,
         channels: Arc<ChannelMap>,
