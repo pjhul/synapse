@@ -2,7 +2,7 @@ use std::net::SocketAddr;
 
 use futures::{FutureExt, StreamExt};
 use futures_channel::mpsc::{unbounded, UnboundedSender};
-use tokio_tungstenite::tungstenite::Message;
+use axum::extract::ws::Message;
 
 use synapse::channel::ChannelMap;
 
@@ -39,7 +39,7 @@ async fn test_add_connection() {
 
     let channels = channel_map.channels.lock().unwrap();
     let channel = channels.get(&channel_name).unwrap();
-    let connections = channel.connections.lock().unwrap();
+    let connections = &channel.connections;
 
     assert!(connections.contains_key(&addr));
 }
@@ -58,7 +58,7 @@ async fn test_remove_connection() {
 
     let channels = channel_map.channels.lock().unwrap();
     let channel = channels.get(&channel_name).unwrap();
-    let connections = channel.connections.lock().unwrap();
+    let connections = &channel.connections;
 
     assert!(!connections.contains_key(&addr));
 }
