@@ -1,24 +1,18 @@
-use std::{convert::Infallible, net::SocketAddr, sync::Arc};
+use std::{net::SocketAddr, sync::Arc};
 
 use axum::{
     extract::{
         ws::{Message, WebSocket},
         ConnectInfo, WebSocketUpgrade,
     },
-    response::{IntoResponse, Response},
+    response::IntoResponse,
     routing::get,
     Router,
 };
-use futures::future::IntoStream;
+
 use futures_util::{future, pin_mut, StreamExt, TryStreamExt};
-use hyper::{
-    server::conn::AddrStream,
-    service::{make_service_fn, service_fn, Service},
-    Body, Request,
-};
 use log::{info, warn};
 use serde::Deserialize;
-use tokio::net::{TcpListener, TcpStream};
 
 use crate::channel::ChannelMap;
 
@@ -42,10 +36,17 @@ impl Server {
     pub async fn run(self, addr: &str) {
         info!("Listening on: {}", addr);
 
-        let app = Router::new().route("/ws", get(Self::ws_handler));
+        let app = Router::new().route(
+            "/ws",
+            get(
+                move |ws: WebSocketUpgrade, conn_info: ConnectInfo<SocketAddr>| {
+                    Self::ws_handler(ws, conn_info, self.channels)
+                },
+            ),
+        );
 
         axum::Server::bind(&addr.parse().unwrap())
-            .serve(app.into_make_service())
+            .serve(app.into_make_service_with_connect_info::<SocketAddr>())
             .await
             .unwrap();
     }
@@ -53,13 +54,12 @@ impl Server {
     async fn ws_handler(
         ws: WebSocketUpgrade,
         ConnectInfo(addr): ConnectInfo<SocketAddr>,
+        channels: Arc<ChannelMap>,
     ) -> impl IntoResponse {
         info!("New connection from: {}", addr);
+        let channels = channels.clone();
 
         ws.on_upgrade(move |socket| async move {
-            // let channels = self.channels.clone();
-            let channels = Arc::new(ChannelMap::new());
-
             tokio::spawn(async move {
                 let addr = addr.to_owned();
                 Server::accept_connection(socket, addr, channels)
