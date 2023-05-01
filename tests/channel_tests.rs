@@ -22,7 +22,7 @@ async fn test_add_channel() {
     let channel_map = ChannelMap::new();
     let channel_name = String::from("test_channel");
 
-    channel_map.add_channel(channel_name.clone());
+    channel_map.add_channel(&channel_name);
 
     assert!(channel_map.has_channel(channel_name));
 }
@@ -34,8 +34,8 @@ async fn test_add_connection() {
     let addr = create_socket_addr();
     let sender = create_sender();
 
-    channel_map.add_channel(channel_name.clone());
-    channel_map.add_connection(channel_name.clone(), addr, sender);
+    channel_map.add_channel(&channel_name);
+    channel_map.add_connection(&channel_name, addr, sender);
 
     let channels = channel_map.channels.lock().unwrap();
     let channel = channels.get(&channel_name).unwrap();
@@ -45,16 +45,16 @@ async fn test_add_connection() {
 }
 
 #[tokio::test]
-async fn test_remove_connection() {
+async fn test_remove_connection_from_all_channels() {
     let channel_map = ChannelMap::new();
     let channel_name = String::from("test_channel");
     let addr = create_socket_addr();
     let sender = create_sender();
 
-    channel_map.add_channel(channel_name.clone());
-    channel_map.add_connection(channel_name.clone(), addr, sender);
+    channel_map.add_channel(&channel_name);
+    channel_map.add_connection(&channel_name, addr, sender);
 
-    channel_map.remove_connection(addr);
+    channel_map.remove_connection_from_all_channels(addr);
 
     let channels = channel_map.channels.lock().unwrap();
     let channel = channels.get(&channel_name).unwrap();
@@ -70,7 +70,7 @@ async fn test_has_channel() {
 
     assert!(!channel_map.has_channel(channel_name.clone()));
 
-    channel_map.add_channel(channel_name.clone());
+    channel_map.add_channel(&channel_name);
 
     assert!(channel_map.has_channel(channel_name));
 }
@@ -85,13 +85,13 @@ async fn test_broadcast() {
     let (sender2, mut receiver2) = unbounded();
     let skip_addr = addr1;
 
-    channel_map.add_channel(channel_name.clone());
-    channel_map.add_connection(channel_name.clone(), addr1, sender1);
-    channel_map.add_connection(channel_name.clone(), addr2, sender2);
+    channel_map.add_channel(&channel_name);
+    channel_map.add_connection(&channel_name, addr1, sender1);
+    channel_map.add_connection(&channel_name, addr2, sender2);
 
     let msg_text = "Hello, world!";
     let message = Message::Text(msg_text.to_owned());
-    channel_map.broadcast(channel_name.clone(), skip_addr, message.clone());
+    channel_map.broadcast(&channel_name, skip_addr, message.clone());
 
     assert!(receiver1.next().now_or_never().is_none());
     let received_msg = receiver2.next().await.unwrap();
