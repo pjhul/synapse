@@ -13,7 +13,7 @@ type Sender = UnboundedSender<Message>;
 #[derive(Clone, Debug)]
 pub struct Channel {
     pub name: String,
-    pub connections: Arc<Mutex<HashMap<SocketAddr, Sender>>>,
+    pub connections: HashMap<SocketAddr, Sender>,
 }
 
 #[derive(Clone, Debug)]
@@ -43,7 +43,7 @@ impl ChannelMap {
             name.clone(),
             Channel {
                 name: name.clone(),
-                connections: Arc::new(Mutex::new(HashMap::new())),
+                connections: HashMap::new(),
             },
         );
     }
@@ -52,7 +52,7 @@ impl ChannelMap {
         let mut channels = self.channels.lock().unwrap();
 
         let channel = channels.get_mut(&channel_name).unwrap();
-        let mut connections = channel.connections.lock().unwrap();
+        let connections = &mut channel.connections;
 
         if connections.contains_key(&addr) {
             info!("Connection already exists for {}", addr);
@@ -66,7 +66,7 @@ impl ChannelMap {
         let mut channels = self.channels.lock().unwrap();
 
         for (_, channel) in channels.iter_mut() {
-            let mut connections = channel.connections.lock().unwrap();
+            let connections = &mut channel.connections;
             connections.remove(&addr);
         }
 
@@ -83,7 +83,7 @@ impl ChannelMap {
         let channels = self.channels.lock().unwrap();
 
         let channel = channels.get(&channel_name).unwrap();
-        let connections = channel.connections.lock().unwrap();
+        let connections = &channel.connections;
 
         for (addr, sender) in connections.iter() {
             if *addr == skip_addr {
