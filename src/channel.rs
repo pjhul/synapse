@@ -6,7 +6,7 @@ use std::{
 
 use futures_channel::mpsc::UnboundedSender;
 use log::info;
-use tokio_tungstenite::tungstenite::Message;
+use axum::extract::ws::Message;
 
 type Sender = UnboundedSender<Message>;
 
@@ -69,6 +69,8 @@ impl ChannelMap {
             let mut connections = channel.connections.lock().unwrap();
             connections.remove(&addr);
         }
+
+        info!("Removed connection for {}", addr);
     }
 
     pub fn has_channel(&self, channel_name: String) -> bool {
