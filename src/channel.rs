@@ -69,6 +69,8 @@ impl ChannelMap {
             let mut connections = channel.connections.lock().unwrap();
             connections.remove(&addr);
         }
+
+        info!("Removed connection for {}", addr);
     }
 
     pub fn has_channel(&self, channel_name: String) -> bool {
