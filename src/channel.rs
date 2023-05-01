@@ -28,10 +28,10 @@ impl ChannelMap {
         }
     }
 
-    pub fn add_channel(&self, name: String) {
+    pub fn add_channel(&self, name: &String) {
         let mut channels = self.channels.lock().unwrap();
 
-        if channels.contains_key(&name) {
+        if channels.contains_key(name) {
             info!("Channel {} already exists", name);
             return;
         }
@@ -48,21 +48,42 @@ impl ChannelMap {
         );
     }
 
-    pub fn add_connection(&self, channel_name: String, addr: SocketAddr, sender: Sender) {
+    pub fn add_connection(&self, channel_name: &String, addr: SocketAddr, sender: Sender) -> Result<(), String> {
         let mut channels = self.channels.lock().unwrap();
 
-        let channel = channels.get_mut(&channel_name).unwrap();
-        let connections = &mut channel.connections;
+        if let Some(channel) = channels.get_mut(channel_name) {
+            let connections = &mut channel.connections;
 
-        if connections.contains_key(&addr) {
-            info!("Connection already exists for {}", addr);
-            return;
+            if connections.contains_key(&addr) {
+                info!("Connection already exists for {}", addr);
+                return Err(format!("Connection already exists for {}", addr));
+            }
+
+            connections.insert(addr, sender);
+            info!("Added connection for {}", addr);
+
+            return Ok(());
+        } else {
+            return Err(format!("Channel {} does not exist", channel_name));
         }
-
-        connections.insert(addr, sender);
     }
 
-    pub fn remove_connection(&self, addr: SocketAddr) {
+    pub fn remove_connection(&self, channel_name: &String, addr: SocketAddr) -> Result<(), String> {
+        let mut channels = self.channels.lock().unwrap();
+
+        if let Some(channel) = channels.get_mut(channel_name) {
+            let connections = &mut channel.connections;
+
+            connections.remove(&addr);
+            info!("Removed connection for {}", addr);
+
+            return Ok(());
+        } else {
+            return Err(format!("Channel {} does not exist", channel_name));
+        }
+    }
+
+    pub fn remove_connection_from_all_channels(&self, addr: SocketAddr) {
         let mut channels = self.channels.lock().unwrap();
 
         for (_, channel) in channels.iter_mut() {
@@ -79,18 +100,23 @@ impl ChannelMap {
         channels.contains_key(&channel_name)
     }
 
-    pub fn broadcast(&self, channel_name: String, skip_addr: SocketAddr, message: Message) {
+    pub fn broadcast(&self, channel_name: &String, skip_addr: SocketAddr, message: Message) -> Result<(), String> {
         let channels = self.channels.lock().unwrap();
 
-        let channel = channels.get(&channel_name).unwrap();
-        let connections = &channel.connections;
+        if let Some(channel) = channels.get(channel_name) {
+            let connections = &channel.connections;
 
-        for (addr, sender) in connections.iter() {
-            if *addr == skip_addr {
-                continue;
+            for (addr, sender) in connections.iter() {
+                if *addr == skip_addr {
+                    continue;
+                }
+
+                sender.unbounded_send(message.clone()).unwrap();
             }
 
-            sender.unbounded_send(message.clone()).unwrap();
+            return Ok(());
+        } else {
+            return Err(format!("Channel {} does not exist", channel_name));
         }
     }
 }

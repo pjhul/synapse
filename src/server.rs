@@ -2,7 +2,7 @@ use std::{net::SocketAddr, sync::Arc};
 
 use axum::{
     extract::{
-        ws::{Message, WebSocket},
+        ws::{Message as WebSocketMessage, WebSocket},
         ConnectInfo, WebSocketUpgrade,
     },
     response::IntoResponse,
@@ -10,17 +10,11 @@ use axum::{
     Router,
 };
 
-use futures_util::{future, pin_mut, StreamExt, TryStreamExt};
-use log::{info, warn};
-use serde::Deserialize;
+use futures_util::{future, pin_mut, StreamExt, TryStreamExt, SinkExt, FutureExt};
+use log::{info, warn, error};
 
 use crate::channel::ChannelMap;
-
-#[derive(Deserialize)]
-struct MessageBody {
-    channel: String,
-    payload: serde_json::Value,
-}
+use crate::message::Message;
 
 pub struct Server {
     channels: Arc<ChannelMap>,
@@ -74,18 +68,76 @@ impl Server {
         addr: SocketAddr,
         channels: Arc<ChannelMap>,
     ) -> Result<(), Box<dyn std::error::Error>> {
-        let (sender, receiver) = futures_channel::mpsc::unbounded::<axum::extract::ws::Message>();
+        let (sender, receiver) = futures_channel::mpsc::unbounded::<WebSocketMessage>();
 
         let (write, read) = stream.split();
 
         let broadcast_incoming = read.try_for_each(|msg| {
             if let Ok(msg) = msg.to_text() {
-                // TODO: Handle error better
-                let body: MessageBody = serde_json::from_str(msg).unwrap();
+                let msg = match msg.parse::<Message>() {
+                    Ok(msg) => msg,
+                    Err(e) => {
+                        warn!("Received an invalid message: {}", e);
 
-                channels.add_channel(body.channel.clone());
-                channels.add_connection(body.channel.clone(), addr, sender.clone());
-                channels.broadcast(body.channel.clone(), addr, Message::Text(msg.into()));
+                        let error_msg = Message::Error {
+                            message: format!("Invalid message: {}", e),
+                        };
+
+                        sender.unbounded_send(WebSocketMessage::Text(error_msg.into())).unwrap();
+
+                        return future::ready(Ok(()));
+                    }
+                };
+
+                // FIXME: This is messy, we should branch and encapsulate this logic better
+                match msg {
+                    Message::Join { ref channel } => {
+                        channels.add_channel(channel);
+
+                        if let Err(e) = channels.add_connection(channel, addr, sender.clone()) {
+                            // TODO: Package this up into a helper function
+                            error!("Failed to add connection: {}", e);
+
+                            let error_msg = Message::Error {
+                                message: format!("Failed to add connection: {}", e),
+                            };
+
+                            sender.unbounded_send(WebSocketMessage::Text(error_msg.into())).unwrap();
+                        }
+                    }
+                    Message::Leave { ref channel } => {
+                        if let Err(e) = channels.remove_connection(channel, addr) {
+                            // TODO: Package this up into a helper function
+                            error!("Failed to remove connection: {}", e);
+
+                            let error_msg = Message::Error {
+                                message: format!("Failed to remove connection: {}", e),
+                            };
+
+                            sender.unbounded_send(WebSocketMessage::Text(error_msg.into())).unwrap();
+                        }
+                    }
+                    Message::Broadcast { ref channel, body } => {
+                        let msg = Message::Broadcast {
+                            channel: channel.clone(),
+                            body,
+                        };
+
+                        if let Err(e) = channels.broadcast(channel, addr, WebSocketMessage::Text(msg.into())) {
+                            // TODO: Package this up into a helper function
+                            error!("Failed to broadcast message: {}", e);
+
+                            let error_msg = Message::Error {
+                                message: format!("Failed to broadcast message: {}", e),
+                            };
+
+                            sender.unbounded_send(WebSocketMessage::Text(error_msg.into())).unwrap();
+                        }
+                    }
+                    Message::Error { message } => {
+                        warn!("Received an error message: {}", message);
+                    }
+                }
             } else {
                 warn!("Received a non-text message");
             }
@@ -98,7 +150,7 @@ impl Server {
         pin_mut!(broadcast_incoming, receive_from_others);
         future::select(broadcast_incoming, receive_from_others).await;
 
-        channels.remove_connection(addr);
+        channels.remove_connection_from_all_channels(addr);
 
         Ok(())
     }
