@@ -32,14 +32,14 @@ pub struct ChannelMap {
     // TODO: Should probably restructure this into a sharded Mutex, and potentially use an RwLock
     // instead as well
     // See: https://docs.rs/dashmap/latest/dashmap/
-    pub channels: Arc<Mutex<HashMap<String, Channel>>>,
+    pub channels: HashMap<String, Channel>,
 }
 
 impl ChannelMap {
     pub fn new(rx: Receiver<Command>) -> Self {
         ChannelMap {
             receiver: rx,
-            channels: Arc::new(Mutex::new(HashMap::new())),
+            channels: HashMap::new(),
         }
     }
 
@@ -110,17 +110,14 @@ impl ChannelMap {
         }
     }
 
-    pub fn add_channel(&self, name: &String) {
-        let mut channels = self.channels.lock().unwrap();
+    pub fn add_channel(&mut self, name: &String) {
+        let channels = &mut self.channels;
 
         if channels.contains_key(name) {
             info!("Channel {} already exists", name);
             return;
         }
 
-        // NOTE: There seems to be weird behavior around inserting a key into a map that is
-        // contained in an Arc<Mutex<>>. The key is inserted, but it seems the map itself is copied
-        // in some way? The issue was fixed by checking if the key existed first.
         channels.insert(
             name.clone(),
             Channel {
@@ -130,8 +127,8 @@ impl ChannelMap {
         );
     }
 
-    pub fn add_connection(&self, channel_name: &String, addr: SocketAddr, sender: Sender) -> Result<(), String> {
-        let mut channels = self.channels.lock().unwrap();
+    pub fn add_connection(&mut self, channel_name: &String, addr: SocketAddr, sender: Sender) -> Result<(), String> {
+        let channels = &mut self.channels;
 
         if let Some(channel) = channels.get_mut(channel_name) {
             let connections = &mut channel.connections;
@@ -150,8 +147,8 @@ impl ChannelMap {
         }
     }
 
-    pub fn remove_connection(&self, channel_name: &String, addr: SocketAddr) -> Result<(), String> {
-        let mut channels = self.channels.lock().unwrap();
+    pub fn remove_connection(&mut self, channel_name: &String, addr: SocketAddr) -> Result<(), String> {
+        let channels = &mut self.channels;
 
         if let Some(channel) = channels.get_mut(channel_name) {
             let connections = &mut channel.connections;
@@ -165,8 +162,8 @@ impl ChannelMap {
         }
     }
 
-    pub fn remove_connection_from_all(&self, addr: SocketAddr) -> Result<(), String> {
-        let mut channels = self.channels.lock().unwrap();
+    pub fn remove_connection_from_all(&mut self, addr: SocketAddr) -> Result<(), String> {
+        let channels = &mut self.channels;
 
         for (_, channel) in channels.iter_mut() {
             let connections = &mut channel.connections;
@@ -179,15 +176,11 @@ impl ChannelMap {
     }
 
     pub fn has_channel(&self, channel_name: String) -> bool {
-        let channels = self.channels.lock().unwrap();
-
-        channels.contains_key(&channel_name)
+        self.channels.contains_key(&channel_name)
     }
 
     pub fn broadcast(&self, channel_name: &String, skip_addr: SocketAddr, message: WebSocketMessage) -> Result<(), String> {
-        let channels = self.channels.lock().unwrap();
-
-        if let Some(channel) = channels.get(channel_name) {
+        if let Some(channel) = self.channels.get(channel_name) {
             let connections = &channel.connections;
 
             for (addr, sender) in connections.iter() {
