@@ -10,7 +10,7 @@ use axum::{
     Router,
 };
 
-use futures_util::{future, pin_mut, StreamExt, TryStreamExt, SinkExt, FutureExt};
+use futures_util::{future, pin_mut, StreamExt, TryStreamExt};
 use log::{info, warn, error};
 
 use crate::channel::ChannelMap;
