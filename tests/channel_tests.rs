@@ -5,6 +5,7 @@ use futures_channel::mpsc::{unbounded, UnboundedSender};
 use axum::extract::ws::Message;
 
 use synapse::channel::ChannelMap;
+use tokio::sync::mpsc;
 
 // Helper function to create a SocketAddr
 fn create_socket_addr() -> SocketAddr {
@@ -17,9 +18,14 @@ fn create_sender() -> UnboundedSender<Message> {
     _tx
 }
 
+fn create_channel_map() -> ChannelMap {
+    let (_tx, rx) = mpsc::channel(1);
+    ChannelMap::new(rx)
+}
+
 #[tokio::test]
 async fn test_add_channel() {
-    let channel_map = ChannelMap::new();
+    let channel_map = create_channel_map();
     let channel_name = String::from("test_channel");
 
     channel_map.add_channel(&channel_name);
@@ -29,7 +35,7 @@ async fn test_add_channel() {
 
 #[tokio::test]
 async fn test_add_connection() {
-    let channel_map = ChannelMap::new();
+    let channel_map = create_channel_map();
     let channel_name = String::from("test_channel");
     let addr = create_socket_addr();
     let sender = create_sender();
@@ -46,7 +52,7 @@ async fn test_add_connection() {
 
 #[tokio::test]
 async fn test_remove_connection() {
-    let channel_map = ChannelMap::new();
+    let channel_map = create_channel_map();
     let channel_name = String::from("test_channel");
     let addr = create_socket_addr();
     let sender = create_sender();
@@ -64,8 +70,8 @@ async fn test_remove_connection() {
 }
 
 #[tokio::test]
-async fn test_remove_connection_from_all_channels() {
-    let channel_map = ChannelMap::new();
+async fn test_remove_connection_from_all() {
+    let channel_map = create_channel_map();
     let channel_name = String::from("test_channel");
     let addr = create_socket_addr();
     let sender = create_sender();
@@ -73,7 +79,7 @@ async fn test_remove_connection_from_all_channels() {
     channel_map.add_channel(&channel_name);
     channel_map.add_connection(&channel_name, addr, sender);
 
-    channel_map.remove_connection_from_all_channels(addr);
+    channel_map.remove_connection_from_all(addr);
 
     let channels = channel_map.channels.lock().unwrap();
     let channel = channels.get(&channel_name).unwrap();
@@ -84,7 +90,7 @@ async fn test_remove_connection_from_all_channels() {
 
 #[tokio::test]
 async fn test_has_channel() {
-    let channel_map = ChannelMap::new();
+    let channel_map = create_channel_map();
     let channel_name = String::from("test_channel");
 
     assert!(!channel_map.has_channel(channel_name.clone()));
@@ -96,7 +102,7 @@ async fn test_has_channel() {
 
 #[tokio::test]
 async fn test_broadcast() {
-    let channel_map = ChannelMap::new();
+    let channel_map = create_channel_map();
     let channel_name = String::from("test_channel");
     let addr1 = create_socket_addr();
     let addr2 = "127.0.0.1:8081".parse().unwrap();
