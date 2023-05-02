@@ -19,6 +19,7 @@ pub struct Channel {
     pub connections: HashMap<SocketAddr, Sender>,
 }
 
+#[derive(Debug)]
 pub struct Command {
     pub addr: SocketAddr,
     pub sender: Sender,
@@ -69,6 +70,17 @@ impl ChannelMap {
 
                         let error_msg = Message::Error {
                             message: format!("Failed to remove connection: {}", e),
+                        };
+
+                        sender.unbounded_send(WebSocketMessage::Text(error_msg.into())).unwrap();
+                    }
+                }
+                Message::Disconnect => {
+                    if let Err(e) = self.remove_connection_from_all(addr) {
+                        error!("Failed to remove connection from all channels: {}", e);
+
+                        let error_msg = Message::Error {
+                            message: format!("Failed to remove connection from all channels: {}", e),
                         };
 
                         sender.unbounded_send(WebSocketMessage::Text(error_msg.into())).unwrap();
@@ -153,7 +165,7 @@ impl ChannelMap {
         }
     }
 
-    pub fn remove_connection_from_all_channels(&self, addr: SocketAddr) {
+    pub fn remove_connection_from_all(&self, addr: SocketAddr) -> Result<(), String> {
         let mut channels = self.channels.lock().unwrap();
 
         for (_, channel) in channels.iter_mut() {
@@ -162,6 +174,8 @@ impl ChannelMap {
         }
 
         info!("Removed connection for {}", addr);
+
+        return Ok(());
     }
 
     pub fn has_channel(&self, channel_name: String) -> bool {

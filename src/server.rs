@@ -125,8 +125,11 @@ impl Server {
         pin_mut!(broadcast_incoming, receive_from_others);
         future::select(broadcast_incoming, receive_from_others).await;
 
-        // TODO: Create command to remove connection from all channels
-        // channels.remove_connection_from_all_channels(addr);
+        tx.send(Command {
+            addr: addr.to_owned(),
+            sender,
+            msg: Message::Disconnect,
+        }).await.unwrap();
 
         Ok(())
     }
