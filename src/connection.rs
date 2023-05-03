@@ -18,7 +18,7 @@ pub type ConnectionSender = UnboundedSender<WebSocketMessage>;
 #[derive(Clone, Debug)]
 pub struct Connection {
     pub addr: SocketAddr,
-    sender: Option<ConnectionSender>,
+    pub sender: Option<ConnectionSender>,
 }
 
 impl Connection {
