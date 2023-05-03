@@ -74,6 +74,8 @@ impl Connection {
         pin_mut!(broadcast_incoming, forward_outgoing);
         select(broadcast_incoming, forward_outgoing).await;
 
+        self.sender.take();
+
         Ok(())
     }
 
