@@ -1,38 +1,56 @@
-use std::{
-    collections::HashMap,
-    net::SocketAddr,
-    sync::{Arc, Mutex},
-};
+use std::{collections::HashMap, net::SocketAddr};
 
-use futures_channel::mpsc::UnboundedSender;
-use log::{info, error, warn};
 use axum::extract::ws::Message as WebSocketMessage;
-use tokio::sync::mpsc::Receiver;
+use futures_channel::mpsc::UnboundedSender;
+use log::{error, info, warn};
+use tokio::sync::mpsc::{Receiver, Sender};
 
 use crate::message::Message;
 
-type Sender = UnboundedSender<WebSocketMessage>;
-
-#[derive(Clone, Debug)]
-pub struct Channel {
-    pub name: String,
-    pub connections: HashMap<SocketAddr, Sender>,
-}
+type ChannelSender = UnboundedSender<WebSocketMessage>;
 
 #[derive(Debug)]
 pub struct Command {
     pub addr: SocketAddr,
-    pub sender: Sender,
+    pub sender: ChannelSender,
     pub msg: Message,
+}
+
+#[derive(Clone, Debug)]
+pub struct Channel {
+    pub name: String,
+    pub connections: HashMap<SocketAddr, ChannelSender>,
 }
 
 #[derive(Debug)]
 pub struct ChannelMap {
     receiver: Receiver<Command>,
-    // TODO: Should probably restructure this into a sharded Mutex, and potentially use an RwLock
+    // TODO: When we switch back to a mutex, should probably restructure this into a sharded Mutex, and potentially use an RwLock
     // instead as well
     // See: https://docs.rs/dashmap/latest/dashmap/
     pub channels: HashMap<String, Channel>,
+}
+
+#[derive(Clone)]
+pub struct ChannelRouter {
+    sender: Sender<Command>,
+}
+
+impl ChannelRouter {
+    pub fn new(tx: Sender<Command>, rx: Receiver<Command>) -> Self {
+        let cmap = ChannelMap::new(rx);
+        cmap.run();
+
+        ChannelRouter { sender: tx }
+    }
+
+    pub async fn send_command(&self, msg: Message, sender: ChannelSender, addr: SocketAddr) {
+        let cmd = Command { addr, sender, msg };
+
+        // TODO: Listen for result here
+
+        self.sender.send(cmd).await.unwrap();
+    }
 }
 
 impl ChannelMap {
@@ -43,71 +61,86 @@ impl ChannelMap {
         }
     }
 
-    pub async fn run(mut self) {
-        while let Some(cmd) = self.receiver.recv().await {
-            let Command { addr, msg, sender } = cmd;
+    pub fn run(mut self) {
+        tokio::spawn(async move {
+            while let Some(cmd) = self.receiver.recv().await {
+                let Command { addr, msg, sender } = cmd;
 
-            // FIXME: This is messy, we should branch and encapsulate this logic better
-            match msg {
-                Message::Join { ref channel } => {
-                    self.add_channel(channel);
+                // FIXME: This is messy, we should branch and encapsulate this logic better
+                match msg {
+                    Message::Join { ref channel } => {
+                        self.add_channel(channel);
 
-                    if let Err(e) = self.add_connection(channel, addr, sender.clone()) {
-                        // TODO: Package this up into a helper function
-                        error!("Failed to add connection: {}", e);
+                        if let Err(e) = self.add_connection(channel, addr, sender.clone()) {
+                            // TODO: Package this up into a helper function
+                            error!("Failed to add connection: {}", e);
 
-                        let error_msg = Message::Error {
-                            message: format!("Failed to add connection: {}", e),
+                            let error_msg = Message::Error {
+                                message: format!("Failed to add connection: {}", e),
+                            };
+
+                            sender
+                                .unbounded_send(WebSocketMessage::Text(error_msg.into()))
+                                .unwrap();
+                        }
+                    }
+                    Message::Leave { ref channel } => {
+                        if let Err(e) = self.remove_connection(channel, addr) {
+                            // TODO: Package this up into a helper function
+                            error!("Failed to remove connection: {}", e);
+
+                            let error_msg = Message::Error {
+                                message: format!("Failed to remove connection: {}", e),
+                            };
+
+                            sender
+                                .unbounded_send(WebSocketMessage::Text(error_msg.into()))
+                                .unwrap();
+                        }
+                    }
+                    Message::Disconnect => {
+                        if let Err(e) = self.remove_connection_from_all(addr) {
+                            error!("Failed to remove connection from all channels: {}", e);
+
+                            let error_msg = Message::Error {
+                                message: format!(
+                                    "Failed to remove connection from all channels: {}",
+                                    e
+                                ),
+                            };
+
+                            sender
+                                .unbounded_send(WebSocketMessage::Text(error_msg.into()))
+                                .unwrap();
+                        }
+                    }
+                    Message::Broadcast { ref channel, body } => {
+                        let msg = Message::Broadcast {
+                            channel: channel.clone(),
+                            body,
                         };
 
-                        sender.unbounded_send(WebSocketMessage::Text(error_msg.into())).unwrap();
+                        if let Err(e) =
+                            self.broadcast(channel, addr, WebSocketMessage::Text(msg.into()))
+                        {
+                            // TODO: Package this up into a helper function
+                            error!("Failed to broadcast message: {}", e);
+
+                            let error_msg = Message::Error {
+                                message: format!("Failed to broadcast message: {}", e),
+                            };
+
+                            sender
+                                .unbounded_send(WebSocketMessage::Text(error_msg.into()))
+                                .unwrap();
+                        }
                     }
-                }
-                Message::Leave { ref channel } => {
-                    if let Err(e) = self.remove_connection(channel, addr) {
-                        // TODO: Package this up into a helper function
-                        error!("Failed to remove connection: {}", e);
-
-                        let error_msg = Message::Error {
-                            message: format!("Failed to remove connection: {}", e),
-                        };
-
-                        sender.unbounded_send(WebSocketMessage::Text(error_msg.into())).unwrap();
+                    Message::Error { message } => {
+                        warn!("Received an error message: {}", message);
                     }
-                }
-                Message::Disconnect => {
-                    if let Err(e) = self.remove_connection_from_all(addr) {
-                        error!("Failed to remove connection from all channels: {}", e);
-
-                        let error_msg = Message::Error {
-                            message: format!("Failed to remove connection from all channels: {}", e),
-                        };
-
-                        sender.unbounded_send(WebSocketMessage::Text(error_msg.into())).unwrap();
-                    }
-                }
-                Message::Broadcast { ref channel, body } => {
-                    let msg = Message::Broadcast {
-                        channel: channel.clone(),
-                        body,
-                    };
-
-                    if let Err(e) = self.broadcast(channel, addr, WebSocketMessage::Text(msg.into())) {
-                        // TODO: Package this up into a helper function
-                        error!("Failed to broadcast message: {}", e);
-
-                        let error_msg = Message::Error {
-                            message: format!("Failed to broadcast message: {}", e),
-                        };
-
-                        sender.unbounded_send(WebSocketMessage::Text(error_msg.into())).unwrap();
-                    }
-                }
-                Message::Error { message } => {
-                    warn!("Received an error message: {}", message);
                 }
             }
-        }
+        });
     }
 
     pub fn add_channel(&mut self, name: &String) {
@@ -127,7 +160,12 @@ impl ChannelMap {
         );
     }
 
-    pub fn add_connection(&mut self, channel_name: &String, addr: SocketAddr, sender: Sender) -> Result<(), String> {
+    pub fn add_connection(
+        &mut self,
+        channel_name: &String,
+        addr: SocketAddr,
+        sender: ChannelSender,
+    ) -> Result<(), String> {
         let channels = &mut self.channels;
 
         if let Some(channel) = channels.get_mut(channel_name) {
@@ -147,7 +185,11 @@ impl ChannelMap {
         }
     }
 
-    pub fn remove_connection(&mut self, channel_name: &String, addr: SocketAddr) -> Result<(), String> {
+    pub fn remove_connection(
+        &mut self,
+        channel_name: &String,
+        addr: SocketAddr,
+    ) -> Result<(), String> {
         let channels = &mut self.channels;
 
         if let Some(channel) = channels.get_mut(channel_name) {
@@ -179,7 +221,12 @@ impl ChannelMap {
         self.channels.contains_key(&channel_name)
     }
 
-    pub fn broadcast(&self, channel_name: &String, skip_addr: SocketAddr, message: WebSocketMessage) -> Result<(), String> {
+    pub fn broadcast(
+        &self,
+        channel_name: &String,
+        skip_addr: SocketAddr,
+        message: WebSocketMessage,
+    ) -> Result<(), String> {
         if let Some(channel) = self.channels.get(channel_name) {
             let connections = &channel.connections;
 

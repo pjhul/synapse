@@ -1,4 +1,4 @@
-use std::{net::SocketAddr, sync::Arc};
+use std::net::SocketAddr;
 
 use axum::{
     extract::{
@@ -12,9 +12,9 @@ use axum::{
 
 use futures_util::{future, pin_mut, StreamExt, TryStreamExt};
 use log::{error, info, warn};
-use tokio::{sync::mpsc, select};
+use tokio::sync::mpsc;
 
-use crate::channel::{ChannelMap, Command};
+use crate::channel::{Command, ChannelRouter};
 use crate::message::Message;
 
 pub struct Server {}
@@ -28,26 +28,19 @@ impl Server {
         info!("Listening on: {}", addr);
 
         let (tx, mut rx) = mpsc::channel::<Command>(1024);
-        let _channels = ChannelMap::new(rx);
+        let channels = ChannelRouter::new(tx, rx);
 
         let app = Router::new().route(
             "/ws",
             get(
                 move |ws: WebSocketUpgrade, conn_info: ConnectInfo<SocketAddr>| {
-                    Self::ws_handler(ws, conn_info, tx)
+                    Self::ws_handler(ws, conn_info, channels)
                 },
             ),
         );
 
 
-        select! {
-            _ = _channels.run() => {
-                error!("ChannelMap exited unexpectedly");
-            }
-            _ = self.run_server(app, addr) => {
-                error!("Server exited unexpectedly");
-            }
-        }
+        self.run_server(app, addr).await
     }
 
     async fn run_server(self, app: Router, addr: &str) {
@@ -60,15 +53,15 @@ impl Server {
     async fn ws_handler(
         ws: WebSocketUpgrade,
         ConnectInfo(addr): ConnectInfo<SocketAddr>,
-        tx: mpsc::Sender<Command>,
+        channels: ChannelRouter
     ) -> impl IntoResponse {
         info!("New connection from: {}", addr);
-        let tx = tx.clone();
+        let channels = channels.clone();
 
         ws.on_upgrade(move |socket| async move {
             tokio::spawn(async move {
                 let addr = addr.to_owned();
-                Self::handle_connection(socket, addr, tx).await.unwrap();
+                Self::handle_connection(socket, addr, channels).await.unwrap();
             });
         })
     }
@@ -76,7 +69,7 @@ impl Server {
     async fn handle_connection(
         stream: WebSocket,
         addr: SocketAddr,
-        tx: mpsc::Sender<Command>,
+        channels: ChannelRouter
     ) -> Result<(), Box<dyn std::error::Error>> {
         let (sender, receiver) = futures_channel::mpsc::unbounded::<WebSocketMessage>();
 
@@ -84,7 +77,7 @@ impl Server {
 
         let broadcast_incoming = read.try_for_each(|msg| {
             let sender = sender.clone();
-            let tx = tx.clone();
+            let channels = channels.clone();
 
             async move {
                 if let Ok(msg) = msg.to_text() {
@@ -103,15 +96,7 @@ impl Server {
                         }
                     };
 
-                    let cmd = Command {
-                        addr: addr.to_owned(),
-                        sender,
-                        msg,
-                    };
-
-                    if let Err(e) = tx.send(cmd).await {
-                        error!("Failed to send command: {}", e);
-                    }
+                    channels.send_command(msg, sender, addr).await;
                 } else {
                     warn!("Received a non-text message");
                 }
@@ -125,11 +110,7 @@ impl Server {
         pin_mut!(broadcast_incoming, receive_from_others);
         future::select(broadcast_incoming, receive_from_others).await;
 
-        tx.send(Command {
-            addr: addr.to_owned(),
-            sender,
-            msg: Message::Disconnect,
-        }).await.unwrap();
+        channels.send_command(Message::Disconnect, sender, addr).await;
 
         Ok(())
     }
