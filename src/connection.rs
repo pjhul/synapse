@@ -3,9 +3,8 @@ use std::{net::SocketAddr, result::Result};
 use axum::extract::ws::{Message as WebSocketMessage, WebSocket};
 
 use futures_util::future::select;
-use futures_util::stream::SplitSink;
-use futures_util::{pin_mut, Future, StreamExt, TryStreamExt};
-use log::warn;
+use futures_util::{pin_mut, StreamExt, TryStreamExt};
+use log::{warn, info};
 use tokio::sync::mpsc::unbounded_channel;
 use tokio::sync::mpsc::{error::SendError, UnboundedSender};
 
@@ -32,6 +31,9 @@ impl Connection {
      * future that completes when the websocket is closed.
      */
     pub async fn listen(&mut self, ws: WebSocket, channels: &ChannelRouter) -> Result<(), Box<dyn std::error::Error>> {
+        let (sender, receiver) = unbounded_channel::<WebSocketMessage>();
+        self.sender = Some(sender);
+
         let (write, read) = ws.split();
 
         let self_clone = self.clone();
@@ -66,28 +68,20 @@ impl Connection {
             }
         });
 
-        pin_mut!(broadcast_incoming);
-        select(broadcast_incoming, self.forward(write)).await;
+        let receiver = UnboundedReceiverStream::new(receiver);
+        let forward_outgoing = receiver.map(Ok).forward(write);
+
+        pin_mut!(broadcast_incoming, forward_outgoing);
+        select(broadcast_incoming, forward_outgoing).await;
 
         Ok(())
-    }
-
-    pub fn forward(
-        &mut self,
-        socket_writer: SplitSink<WebSocket, WebSocketMessage>,
-    ) -> impl Future<Output = Result<(), axum::Error>> {
-        let (sender, receiver) = unbounded_channel::<WebSocketMessage>();
-
-        self.sender = Some(sender);
-
-        let receiver = UnboundedReceiverStream::from(receiver);
-        receiver.map(|msg| Ok(msg)).forward(socket_writer)
     }
 
     pub fn send(&self, msg: WebSocketMessage) -> Result<(), SendError<WebSocketMessage>> {
         if let Some(ref sender) = self.sender {
             sender.send(msg)
         } else {
+            warn!("Attempted to send a message to a connection that has no sender");
             Ok(())
         }
     }
