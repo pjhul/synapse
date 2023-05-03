@@ -4,8 +4,8 @@ use axum::extract::ws::Message as WebSocketMessage;
 use log::{error, info, warn};
 use tokio::sync::mpsc::{Receiver, Sender};
 
-use crate::message::Message;
 use crate::connection::Connection;
+use crate::message::Message;
 
 #[derive(Debug)]
 pub struct Command {
@@ -65,16 +65,42 @@ impl ChannelMap {
 
                 // FIXME: This is messy, we should branch and encapsulate this logic better
                 match msg {
-                    Message::Join { ref channel } => {
+                    Message::Join {
+                        ref channel,
+                        presence,
+                    } => {
                         self.add_channel(channel);
 
                         if let Err(e) = self.add_connection(channel, conn.clone()) {
                             // TODO: Package this up into a helper function
                             error!("Failed to add connection: {}", e);
 
-                            conn.send(Message::Error {
-                                message: format!("Failed to add connection: {}", e),
-                            }.into()).unwrap();
+                            conn.send(
+                                Message::Error {
+                                    message: format!("Failed to add connection: {}", e),
+                                }
+                                .into(),
+                            )
+                            .unwrap();
+                        } else {
+                            let channel = self.get_channel(channel).unwrap().clone();
+
+                            self.broadcast(
+                                &channel.name,
+                                conn.addr,
+                                WebSocketMessage::Text(
+                                    Message::Presence {
+                                        channel: channel.name.clone(),
+                                        connections: channel
+                                            .connections
+                                            .values()
+                                            .map(|c| c.addr.to_string())
+                                            .collect(),
+                                    }
+                                    .into(),
+                                ),
+                            )
+                            .unwrap();
                         }
                     }
                     Message::Leave { ref channel } => {
@@ -82,21 +108,29 @@ impl ChannelMap {
                             // TODO: Package this up into a helper function
                             error!("Failed to remove connection: {}", e);
 
-                            conn.send(Message::Error {
-                                message: format!("Failed to remove connection: {}", e),
-                            }.into()).unwrap();
+                            conn.send(
+                                Message::Error {
+                                    message: format!("Failed to remove connection: {}", e),
+                                }
+                                .into(),
+                            )
+                            .unwrap();
                         }
                     }
                     Message::Disconnect => {
                         if let Err(e) = self.remove_connection_from_all(conn.addr) {
                             error!("Failed to remove connection from all channels: {}", e);
 
-                            conn.send(Message::Error {
-                                message: format!(
-                                    "Failed to remove connection from all channels: {}",
-                                    e
-                                ),
-                            }.into()).unwrap();
+                            conn.send(
+                                Message::Error {
+                                    message: format!(
+                                        "Failed to remove connection from all channels: {}",
+                                        e
+                                    ),
+                                }
+                                .into(),
+                            )
+                            .unwrap();
                         }
                     }
                     Message::Broadcast { ref channel, body } => {
@@ -111,17 +145,36 @@ impl ChannelMap {
                             // TODO: Package this up into a helper function
                             error!("Failed to broadcast message: {}", e);
 
-                            conn.send(Message::Error {
-                                message: format!("Failed to broadcast message: {}", e),
-                            }.into()).unwrap();
+                            conn.send(
+                                Message::Error {
+                                    message: format!("Failed to broadcast message: {}", e),
+                                }
+                                .into(),
+                            )
+                            .unwrap();
                         }
                     }
                     Message::Error { message } => {
                         warn!("Received an error message: {}", message);
                     }
+                    _ => {
+                        error!("Received an invalid message: {:?}", msg);
+
+                        conn.send(
+                            Message::Error {
+                                message: format!("Received an invalid message: {:?}", msg),
+                            }
+                            .into(),
+                        )
+                        .unwrap();
+                    }
                 }
             }
         });
+    }
+
+    pub fn get_channel(&self, name: &String) -> Option<&Channel> {
+        self.channels.get(name)
     }
 
     pub fn add_channel(&mut self, name: &String) {
@@ -144,11 +197,9 @@ impl ChannelMap {
     pub fn add_connection(
         &mut self,
         channel_name: &String,
-        conn: Connection
+        conn: Connection,
     ) -> Result<(), String> {
-        let channels = &mut self.channels;
-
-        if let Some(channel) = channels.get_mut(channel_name) {
+        if let Some(channel) = self.channels.get_mut(channel_name) {
             let connections = &mut channel.connections;
 
             if connections.contains_key(&conn.addr) {
@@ -170,26 +221,69 @@ impl ChannelMap {
         channel_name: &String,
         addr: SocketAddr,
     ) -> Result<(), String> {
-        let channels = &mut self.channels;
+        let channel = self.channels.get_mut(channel_name);
 
-        if let Some(channel) = channels.get_mut(channel_name) {
-            let connections = &mut channel.connections;
-
-            connections.remove(&addr);
+        if let Some(channel) = channel {
+            channel.connections.remove(&addr);
             info!("Removed connection for {}", addr);
 
-            return Ok(());
+            // if connections.len() == 0 {
+            //     self.channels.remove(&channel.name);
+            // }
         } else {
             return Err(format!("Channel {} does not exist", channel_name));
         }
+
+        // FIXME: Don't `get` the channel twice, use the same one from above
+        let channel = self.channels.get(channel_name);
+
+        let msg = Message::Presence {
+            channel: channel_name.clone(),
+            connections: channel.unwrap().connections
+                .values()
+                .map(|c| c.addr.to_string())
+                .filter(|a| *a != addr.to_string())
+                .collect(),
+        };
+
+        self.broadcast(&channel_name, addr, msg.into())?;
+
+            return Ok(());
     }
 
     pub fn remove_connection_from_all(&mut self, addr: SocketAddr) -> Result<(), String> {
-        let channels = &mut self.channels;
+        let mut removed = Vec::new();
 
-        for (_, channel) in channels.iter_mut() {
-            let connections = &mut channel.connections;
-            connections.remove(&addr);
+        // TODO: Rather than looping through all channels to remove the connection, have each
+        // connection store the channels it is a part of. This also make the second part of
+        // broadcasting updates much simpler
+        for (name, channel) in self.channels.iter_mut() {
+            if channel.connections.contains_key(&addr) {
+                channel.connections.remove(&addr);
+
+                removed.push(name.clone());
+
+                if channel.connections.len() == 0 {
+                    // self.channels.remove(&channel.name);
+                }
+            }
+        }
+
+        for name in removed {
+            // TODO: Don't `get` the channels twice if possible
+            let channel = self.channels.get(&name).unwrap().clone();
+
+            let msg = Message::Presence {
+                channel: name.clone(),
+                connections: channel
+                    .connections
+                    .values()
+                    .map(|c| c.addr.to_string())
+                    .filter(|a| *a != addr.to_string())
+                    .collect(),
+            };
+
+            self.broadcast(&channel.name, addr, msg.into())?;
         }
 
         info!("Removed connection for {}", addr);
@@ -202,7 +296,7 @@ impl ChannelMap {
     }
 
     pub fn broadcast(
-        &self,
+        &mut self,
         channel_name: &String,
         skip_addr: SocketAddr,
         message: WebSocketMessage,

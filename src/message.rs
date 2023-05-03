@@ -1,17 +1,32 @@
 use std::str::FromStr;
 
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
 use axum::extract::ws::Message as WebSocketMessage;
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Message {
-    Join { channel: String },
-    Leave { channel: String },
+    Join {
+        channel: String,
+        #[serde(default)]
+        presence: bool,
+    },
+    Leave {
+        channel: String,
+    },
     Disconnect,
-    Broadcast { channel: String, body: serde_json::Value },
-    Error { message: String },
+    Broadcast {
+        channel: String,
+        body: serde_json::Value,
+    },
+    Presence {
+        channel: String,
+        connections: Vec<String>,
+    },
+    Error {
+        message: String,
+    },
 }
 
 impl FromStr for Message {
