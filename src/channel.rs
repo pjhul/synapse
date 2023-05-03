@@ -68,13 +68,13 @@ impl ChannelMap {
                     Message::Join { ref channel } => {
                         self.add_channel(channel);
 
-                        if let Err(e) = self.add_connection(channel, conn) {
+                        if let Err(e) = self.add_connection(channel, conn.clone()) {
                             // TODO: Package this up into a helper function
                             error!("Failed to add connection: {}", e);
 
                             conn.send(Message::Error {
                                 message: format!("Failed to add connection: {}", e),
-                            }.into());
+                            }.into()).unwrap();
                         }
                     }
                     Message::Leave { ref channel } => {
@@ -84,7 +84,7 @@ impl ChannelMap {
 
                             conn.send(Message::Error {
                                 message: format!("Failed to remove connection: {}", e),
-                            }.into());
+                            }.into()).unwrap();
                         }
                     }
                     Message::Disconnect => {
@@ -96,7 +96,7 @@ impl ChannelMap {
                                     "Failed to remove connection from all channels: {}",
                                     e
                                 ),
-                            }.into());
+                            }.into()).unwrap();
                         }
                     }
                     Message::Broadcast { ref channel, body } => {
@@ -113,7 +113,7 @@ impl ChannelMap {
 
                             conn.send(Message::Error {
                                 message: format!("Failed to broadcast message: {}", e),
-                            }.into());
+                            }.into()).unwrap();
                         }
                     }
                     Message::Error { message } => {

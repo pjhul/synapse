@@ -2,15 +2,16 @@ use std::{net::SocketAddr, result::Result};
 
 use axum::extract::ws::{Message as WebSocketMessage, WebSocket};
 
-use futures_util::future::{select, self};
-use futures_util::stream::{Forward, SplitSink};
-use futures_util::{pin_mut, Future, StreamExt, TryFuture, TryStreamExt};
+use futures_util::future::select;
+use futures_util::stream::SplitSink;
+use futures_util::{pin_mut, Future, StreamExt, TryStreamExt};
 use log::warn;
 use tokio::sync::mpsc::unbounded_channel;
 use tokio::sync::mpsc::{error::SendError, UnboundedSender};
 
 use tokio_stream::wrappers::UnboundedReceiverStream;
 
+use crate::channel::ChannelRouter;
 use crate::message::Message;
 
 pub type ConnectionSender = UnboundedSender<WebSocketMessage>;
@@ -26,40 +27,46 @@ impl Connection {
         Self { addr, sender: None }
     }
 
-    pub async fn listen<F>(&mut self, ws: WebSocket, mut f: F) -> Result<(), ()>
-    where
-        F: FnMut(Message) -> Fut + Send + 'static,
-    {
+    /**
+     * Listens for messages on the websocket and forwards them to the channel router. Returns a
+     * future that completes when the websocket is closed.
+     */
+    pub async fn listen(&mut self, ws: WebSocket, channels: &ChannelRouter) -> Result<(), Box<dyn std::error::Error>> {
         let (write, read) = ws.split();
 
+        let self_clone = self.clone();
+
         let broadcast_incoming = read.try_for_each(|msg| {
-            if let Ok(msg) = msg.to_text() {
-                /*let msg = match msg.parse::<Message>() {
-                    Ok(msg) => msg,
-                    Err(e) => {
-                        warn!("Received an invalid message: {}", e);
+            let self_clone = self_clone.clone();
 
-                        /*self.send(Message::Error {
-                            message: format!("Invalid message: {}", e),
-                        }.into());*/
+            async move {
+                if let Ok(msg) = msg.to_text() {
+                    let msg = match msg.parse::<Message>() {
+                        Ok(msg) => msg,
+                        Err(e) => {
+                            warn!("Received an invalid message: {}", e);
 
+                            self_clone.send(
+                                Message::Error {
+                                    message: format!("Invalid message: {}", e),
+                                }
+                                .into(),
+                            ).unwrap();
 
-                    }
-                };*/
+                            return Ok(());
+                        }
+                    };
 
-                let msg = msg.parse::<Message>().unwrap();
+                    channels.send_command(msg, self_clone).await;
+                } else {
+                    warn!("Received a non-text message");
+                }
 
-                // Need to somehow ensure that this doesn't force the entire method return type to
-                // be Fut and not just something that imlements future
-                return f(msg);
-            } else {
-                warn!("Received a non-text message");
+                Ok(())
             }
-
-            future::ok(())
         });
 
-        pin_mut!(broadcast_incoming /*, receive_from_others*/);
+        pin_mut!(broadcast_incoming);
         select(broadcast_incoming, self.forward(write)).await;
 
         Ok(())
@@ -69,7 +76,7 @@ impl Connection {
         &mut self,
         socket_writer: SplitSink<WebSocket, WebSocketMessage>,
     ) -> impl Future<Output = Result<(), axum::Error>> {
-        let (sender, mut receiver) = unbounded_channel::<WebSocketMessage>();
+        let (sender, receiver) = unbounded_channel::<WebSocketMessage>();
 
         self.sender = Some(sender);
 
@@ -78,7 +85,7 @@ impl Connection {
     }
 
     pub fn send(&self, msg: WebSocketMessage) -> Result<(), SendError<WebSocketMessage>> {
-        if let Some(sender) = self.sender {
+        if let Some(ref sender) = self.sender {
             sender.send(msg)
         } else {
             Ok(())
