@@ -2,6 +2,8 @@ use std::str::FromStr;
 
 use serde::{Serialize, Deserialize};
 
+use axum::extract::ws::Message as WebSocketMessage;
+
 #[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Message {
@@ -23,5 +25,11 @@ impl FromStr for Message {
 impl Into<String> for Message {
     fn into(self) -> String {
         serde_json::to_string(&self).unwrap()
+    }
+}
+
+impl Into<WebSocketMessage> for Message {
+    fn into(self) -> WebSocketMessage {
+        WebSocketMessage::Text(self.into())
     }
 }

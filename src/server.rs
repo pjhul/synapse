@@ -10,11 +10,12 @@ use axum::{
     Router,
 };
 
+use futures_channel::mpsc::unbounded;
 use futures_util::{future, pin_mut, StreamExt, TryStreamExt};
 use log::{error, info, warn};
-use tokio::sync::mpsc;
+use tokio::sync::mpsc::{self, channel, unbounded_channel};
 
-use crate::channel::{Command, ChannelRouter};
+use crate::{channel::{Command, ChannelRouter}, connection::Connection};
 use crate::message::Message;
 
 pub struct Server {}
@@ -71,12 +72,13 @@ impl Server {
         addr: SocketAddr,
         channels: ChannelRouter
     ) -> Result<(), Box<dyn std::error::Error>> {
-        let (sender, receiver) = futures_channel::mpsc::unbounded::<WebSocketMessage>();
+        let mut conn = Connection::new(addr);
 
         let (write, read) = stream.split();
 
+        let read_conn = conn.clone();
+
         let broadcast_incoming = read.try_for_each(|msg| {
-            let sender = sender.clone();
             let channels = channels.clone();
 
             async move {
@@ -86,17 +88,15 @@ impl Server {
                         Err(e) => {
                             warn!("Received an invalid message: {}", e);
 
-                            let error_msg = Message::Error {
+                            read_conn.send(Message::Error {
                                 message: format!("Invalid message: {}", e),
-                            };
-
-                            sender.unbounded_send(WebSocketMessage::Text(error_msg.into())).unwrap();
+                            }.into());
 
                             return Ok(());
                         }
                     };
 
-                    channels.send_command(msg, sender, addr).await;
+                    channels.send_command(msg, read_conn).await;
                 } else {
                     warn!("Received a non-text message");
                 }
@@ -105,12 +105,10 @@ impl Server {
             }
         });
 
-        let receive_from_others = receiver.map(Ok).forward(write);
+        pin_mut!(broadcast_incoming /*, receive_from_others*/);
+        future::select(broadcast_incoming, conn.forward(write)).await;
 
-        pin_mut!(broadcast_incoming, receive_from_others);
-        future::select(broadcast_incoming, receive_from_others).await;
-
-        channels.send_command(Message::Disconnect, sender, addr).await;
+        channels.send_command(Message::Disconnect, conn).await;
 
         Ok(())
     }

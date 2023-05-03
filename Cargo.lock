@@ -816,6 +816,7 @@ name = "synapse"
 version = "0.1.0"
 dependencies = [
  "axum",
+ "bytes",
  "env_logger",
  "futures",
  "futures-channel",
@@ -825,6 +826,7 @@ dependencies = [
  "serde",
  "serde_json",
  "tokio",
+ "tokio-stream",
  "tokio-tungstenite",
  "tungstenite 0.19.0",
 ]
@@ -907,6 +909,17 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.15",
+]
+
+[[package]]
+name = "tokio-stream"
+version = "0.1.14"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "397c988d37662c7dda6d2208364a706264bf3d6138b11d436cbac0ad38832842"
+dependencies = [
+ "futures-core",
+ "pin-project-lite",
+ "tokio",
 ]
 
 [[package]]

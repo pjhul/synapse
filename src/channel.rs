@@ -1,25 +1,22 @@
 use std::{collections::HashMap, net::SocketAddr};
 
 use axum::extract::ws::Message as WebSocketMessage;
-use futures_channel::mpsc::UnboundedSender;
 use log::{error, info, warn};
 use tokio::sync::mpsc::{Receiver, Sender};
 
 use crate::message::Message;
-
-type ChannelSender = UnboundedSender<WebSocketMessage>;
+use crate::connection::Connection;
 
 #[derive(Debug)]
 pub struct Command {
-    pub addr: SocketAddr,
-    pub sender: ChannelSender,
+    pub conn: Connection,
     pub msg: Message,
 }
 
 #[derive(Clone, Debug)]
 pub struct Channel {
     pub name: String,
-    pub connections: HashMap<SocketAddr, ChannelSender>,
+    pub connections: HashMap<SocketAddr, Connection>,
 }
 
 #[derive(Debug)]
@@ -38,14 +35,14 @@ pub struct ChannelRouter {
 
 impl ChannelRouter {
     pub fn new(tx: Sender<Command>, rx: Receiver<Command>) -> Self {
-        let cmap = ChannelMap::new(rx);
-        cmap.run();
+        let channel_map = ChannelMap::new(rx);
+        channel_map.run();
 
         ChannelRouter { sender: tx }
     }
 
-    pub async fn send_command(&self, msg: Message, sender: ChannelSender, addr: SocketAddr) {
-        let cmd = Command { addr, sender, msg };
+    pub async fn send_command(&self, msg: Message, conn: Connection) {
+        let cmd = Command { conn, msg };
 
         // TODO: Listen for result here
 
@@ -64,54 +61,42 @@ impl ChannelMap {
     pub fn run(mut self) {
         tokio::spawn(async move {
             while let Some(cmd) = self.receiver.recv().await {
-                let Command { addr, msg, sender } = cmd;
+                let Command { msg, conn } = cmd;
 
                 // FIXME: This is messy, we should branch and encapsulate this logic better
                 match msg {
                     Message::Join { ref channel } => {
                         self.add_channel(channel);
 
-                        if let Err(e) = self.add_connection(channel, addr, sender.clone()) {
+                        if let Err(e) = self.add_connection(channel, conn) {
                             // TODO: Package this up into a helper function
                             error!("Failed to add connection: {}", e);
 
-                            let error_msg = Message::Error {
+                            conn.send(Message::Error {
                                 message: format!("Failed to add connection: {}", e),
-                            };
-
-                            sender
-                                .unbounded_send(WebSocketMessage::Text(error_msg.into()))
-                                .unwrap();
+                            }.into());
                         }
                     }
                     Message::Leave { ref channel } => {
-                        if let Err(e) = self.remove_connection(channel, addr) {
+                        if let Err(e) = self.remove_connection(channel, conn.addr) {
                             // TODO: Package this up into a helper function
                             error!("Failed to remove connection: {}", e);
 
-                            let error_msg = Message::Error {
+                            conn.send(Message::Error {
                                 message: format!("Failed to remove connection: {}", e),
-                            };
-
-                            sender
-                                .unbounded_send(WebSocketMessage::Text(error_msg.into()))
-                                .unwrap();
+                            }.into());
                         }
                     }
                     Message::Disconnect => {
-                        if let Err(e) = self.remove_connection_from_all(addr) {
+                        if let Err(e) = self.remove_connection_from_all(conn.addr) {
                             error!("Failed to remove connection from all channels: {}", e);
 
-                            let error_msg = Message::Error {
+                            conn.send(Message::Error {
                                 message: format!(
                                     "Failed to remove connection from all channels: {}",
                                     e
                                 ),
-                            };
-
-                            sender
-                                .unbounded_send(WebSocketMessage::Text(error_msg.into()))
-                                .unwrap();
+                            }.into());
                         }
                     }
                     Message::Broadcast { ref channel, body } => {
@@ -121,18 +106,14 @@ impl ChannelMap {
                         };
 
                         if let Err(e) =
-                            self.broadcast(channel, addr, WebSocketMessage::Text(msg.into()))
+                            self.broadcast(channel, conn.addr, WebSocketMessage::Text(msg.into()))
                         {
                             // TODO: Package this up into a helper function
                             error!("Failed to broadcast message: {}", e);
 
-                            let error_msg = Message::Error {
+                            conn.send(Message::Error {
                                 message: format!("Failed to broadcast message: {}", e),
-                            };
-
-                            sender
-                                .unbounded_send(WebSocketMessage::Text(error_msg.into()))
-                                .unwrap();
+                            }.into());
                         }
                     }
                     Message::Error { message } => {
@@ -163,21 +144,20 @@ impl ChannelMap {
     pub fn add_connection(
         &mut self,
         channel_name: &String,
-        addr: SocketAddr,
-        sender: ChannelSender,
+        conn: Connection
     ) -> Result<(), String> {
         let channels = &mut self.channels;
 
         if let Some(channel) = channels.get_mut(channel_name) {
             let connections = &mut channel.connections;
 
-            if connections.contains_key(&addr) {
-                info!("Connection already exists for {}", addr);
-                return Err(format!("Connection already exists for {}", addr));
+            if connections.contains_key(&conn.addr) {
+                info!("Connection already exists for {}", conn.addr);
+                return Err(format!("Connection already exists for {}", conn.addr));
             }
 
-            connections.insert(addr, sender);
-            info!("Added connection for {}", addr);
+            info!("Added connection for {}", conn.addr);
+            connections.insert(conn.addr, conn);
 
             return Ok(());
         } else {
@@ -235,7 +215,7 @@ impl ChannelMap {
                     continue;
                 }
 
-                sender.unbounded_send(message.clone()).unwrap();
+                sender.send(message.clone()).unwrap();
             }
 
             return Ok(());

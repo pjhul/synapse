@@ -18,3 +18,5 @@ serde_json = "1.0.96"
 tokio = { version = "1.28.0", features = ["full"] }
 tokio-tungstenite = "0.18.0"
 tungstenite = "0.19.0"
+bytes = "1.4.0"
+tokio-stream = "0.1"
