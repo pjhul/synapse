@@ -1,0 +1,13 @@
+# fly.toml app configuration file generated for synapse-rs on 2023-05-03T18:49:37-07:00
+#
+# See https://fly.io/docs/reference/configuration/ for information about how to use this file.
+#
+
+app = "synapse-rs"
+primary_region = "lax"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = true
+  auto_start_machines = true
