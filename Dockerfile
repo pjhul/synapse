@@ -1,7 +1,7 @@
 FROM rust:1.67 as builder
 WORKDIR /usr/src/synapse
 COPY . .
-RUN cargo install --path .
+RUN cargo install --path . --bin synapse
 
 FROM debian:bullseye-slim
 RUN apt-get update && rm -rf /var/lib/apt/lists/*

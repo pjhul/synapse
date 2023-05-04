@@ -15,6 +15,7 @@ use tokio::sync::mpsc;
 
 use crate::{channel::{Command, ChannelRouter}, connection::Connection};
 use crate::message::Message;
+use crate::metrics::Metrics;
 
 pub struct Server {}
 
@@ -79,3 +80,5 @@ impl Server {
         Ok(())
     }
 }
+
+impl Metrics for Server {}

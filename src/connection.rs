@@ -12,6 +12,7 @@ use tokio_stream::wrappers::UnboundedReceiverStream;
 
 use crate::channel::ChannelRouter;
 use crate::message::Message;
+use crate::metrics::Metrics;
 
 pub type ConnectionSender = UnboundedSender<WebSocketMessage>;
 
@@ -37,6 +38,8 @@ impl Connection {
     pub async fn listen(&mut self, ws: WebSocket, channels: &ChannelRouter) -> Result<(), Box<dyn std::error::Error>> {
         let (sender, receiver) = unbounded_channel::<WebSocketMessage>();
         self.sender = Some(sender);
+
+        self.increment("Connection::connections", 1);
 
         let (write, read) = ws.split();
 
@@ -72,6 +75,8 @@ impl Connection {
             }
         });
 
+        // FIXME: We should have a periodic check that the connection is still alive
+
         let receiver = UnboundedReceiverStream::new(receiver);
         let forward_outgoing = receiver.map(Ok).forward(write);
 
@@ -79,6 +84,8 @@ impl Connection {
         select(broadcast_incoming, forward_outgoing).await;
 
         self.sender.take();
+
+        self.decrement("Connection::connections", 1);
 
         Ok(())
     }
@@ -92,3 +99,5 @@ impl Connection {
         }
     }
 }
+
+impl Metrics for Connection {}
