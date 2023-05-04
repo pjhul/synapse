@@ -87,7 +87,6 @@ impl ChannelMap {
 
                             self.broadcast(
                                 &channel.name,
-                                conn.addr,
                                 WebSocketMessage::Text(
                                     Message::Presence {
                                         channel: channel.name.clone(),
@@ -99,6 +98,7 @@ impl ChannelMap {
                                     }
                                     .into(),
                                 ),
+                                None
                             )
                             .unwrap();
                         }
@@ -140,7 +140,7 @@ impl ChannelMap {
                         };
 
                         if let Err(e) =
-                            self.broadcast(channel, conn.addr, WebSocketMessage::Text(msg.into()))
+                            self.broadcast(channel, WebSocketMessage::Text(msg.into()), conn.addr.into())
                         {
                             // TODO: Package this up into a helper function
                             error!("Failed to broadcast message: {}", e);
@@ -246,7 +246,7 @@ impl ChannelMap {
                 .collect(),
         };
 
-        self.broadcast(&channel_name, addr, msg.into())?;
+        self.broadcast(&channel_name, msg.into(), addr.into())?;
 
             return Ok(());
     }
@@ -283,7 +283,7 @@ impl ChannelMap {
                     .collect(),
             };
 
-            self.broadcast(&channel.name, addr, msg.into())?;
+            self.broadcast(&channel.name, msg.into(), addr.into())?;
         }
 
         info!("Removed connection for {}", addr);
@@ -298,15 +298,20 @@ impl ChannelMap {
     pub fn broadcast(
         &mut self,
         channel_name: &String,
-        skip_addr: SocketAddr,
         message: WebSocketMessage,
+        skip_addr: Option<SocketAddr>,
     ) -> Result<(), String> {
         if let Some(channel) = self.channels.get(channel_name) {
             let connections = &channel.connections;
 
             for (addr, sender) in connections.iter() {
-                if *addr == skip_addr {
-                    continue;
+                match skip_addr {
+                    Some(skip_addr) => {
+                        if *addr == skip_addr {
+                            continue;
+                        }
+                    }
+                    None => {}
                 }
 
                 sender.send(message.clone()).unwrap();
