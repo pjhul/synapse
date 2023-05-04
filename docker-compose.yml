@@ -21,7 +21,7 @@ services:
     depends_on:
       - main_program
     deploy:
-      replicas: 20
+      replicas: 2
       resources:
         limits:
           cpus: '0.5'

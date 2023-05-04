@@ -20,6 +20,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             if let Some(num_connections) = metrics.get("Connection::connections") {
                 println!("Num connections: {}", num_connections);
             }
+
+            if let Some(num_messages) = metrics.get("Connection::messages") {
+                println!("Num messages: {}", num_messages);
+            }
         }
     });
 

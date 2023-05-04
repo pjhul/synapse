@@ -48,6 +48,8 @@ impl Connection {
         let broadcast_incoming = read.try_for_each(|msg| {
             let self_clone = self_clone.clone();
 
+            self_clone.increment("Connection::messages", 1);
+
             async move {
                 if let Ok(msg) = msg.to_text() {
                     let msg = match msg.parse::<Message>() {
