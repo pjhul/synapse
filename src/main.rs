@@ -12,7 +12,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .nth(1)
         .unwrap_or_else(|| "0.0.0.0:8080".to_string());
 
-    tokio::spawn(async move {
+    /*tokio::spawn(async move {
         loop {
             tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
             let metrics = get_metrics();
@@ -25,7 +25,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 println!("Num messages: {}", num_messages);
             }
         }
-    });
+    });*/
 
     let server = Server::new();
     server.run(&addr).await;
