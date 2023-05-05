@@ -5,8 +5,9 @@ use axum::{
     extract::{Extension, Path},
     Router, response::IntoResponse,
 };
+use hyper::StatusCode;
 
-use crate::channel::router::ChannelRouter;
+use crate::{channel::router::{ChannelRouter, CommandResponse}, message::Message};
 
 async fn create_channel(
     Extension(channel_router): Extension<ChannelRouter>,
@@ -16,7 +17,16 @@ async fn create_channel(
 }
 
 async fn get_channels(Extension(channel_router): Extension<ChannelRouter>) -> impl IntoResponse {
-    println!("get_channels");
+    let res = channel_router.send_command(Message::ChannelGetAll, None).await;
+
+    match res {
+        Ok(CommandResponse::ChannelGetAll(channels)) => {
+            let body = serde_json::to_string(&channels).unwrap();
+            (StatusCode::OK, body).into_response()
+        }
+        Ok(_) => (StatusCode::INTERNAL_SERVER_ERROR, "Internal Server Error".to_string()).into_response(),
+        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e).into_response(),
+    }
 }
 
 async fn get_channel(

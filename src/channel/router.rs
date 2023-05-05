@@ -8,9 +8,17 @@ use super::store::ChannelStore;
 
 #[derive(Debug)]
 pub struct Command {
-    pub conn: Connection,
     pub msg: Message,
-    pub result: Option<OneshotSender<Result<(), String>>>,
+    pub conn: Option<Connection>,
+    pub result: Option<OneshotSender<CommandResult>>,
+}
+
+pub type CommandResult = Result<CommandResponse, String>;
+
+#[derive(Debug)]
+pub enum CommandResponse {
+    Ok,
+    ChannelGetAll(Vec<String>),
 }
 
 #[derive(Clone)]
@@ -28,8 +36,8 @@ impl ChannelRouter {
         ChannelRouter { sender: tx }
     }
 
-    pub async fn send_command(&self, msg: Message, conn: Connection) -> Result<(), String> {
-        let (result, rx) = tokio::sync::oneshot::channel::<Result<(), String>>();
+    pub async fn send_command(&self, msg: Message, conn: Option<Connection>) -> CommandResult {
+        let (result, rx) = tokio::sync::oneshot::channel::<CommandResult>();
         let cmd = Command {
             conn,
             msg,

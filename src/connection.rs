@@ -68,7 +68,7 @@ impl Connection {
                         }
                     };
 
-                    let result = channels.send_command(msg.clone(), self_clone.clone()).await;
+                    let result = channels.send_command(msg.clone(), Some(self_clone.clone())).await;
 
                     if let Err(e) = result {
                         error!("{}", e);

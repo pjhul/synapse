@@ -8,7 +8,7 @@ use tokio::sync::mpsc::Receiver;
 use crate::connection::Connection;
 use crate::message::Message;
 
-use super::router::Command;
+use super::router::{Command, CommandResult};
 
 #[derive(Clone, Debug)]
 pub struct Channel {
@@ -38,28 +38,35 @@ impl ChannelStore {
             while let Some(cmd) = self.receiver.recv().await {
                 let Command { msg, conn, result } = cmd;
 
-                let cmd_result = match msg.clone() {
+                let cmd_result: CommandResult = match msg.clone() {
                     Message::Join {
                         ref channel,
                         presence,
                     } => {
-                        self.handle_join(channel, conn.clone())
+                        let conn = conn.unwrap();
+                        self.handle_join(channel, conn.clone()).into()
                     }
                     Message::Leave { ref channel } => {
-                        self.handle_leave(channel, conn.clone())
+                        let conn = conn.unwrap();
+                        self.handle_leave(channel, conn.clone()).into()
                     }
                     Message::Disconnect => {
-                        self.handle_disconnect(conn.clone())
+                        let conn = conn.unwrap();
+                        self.handle_disconnect(conn.clone()).into()
                     }
                     Message::Broadcast { ref channel, body } => {
-                        self.handle_broadcast(channel, body, conn.clone())
+                        let conn = conn.unwrap();
+                        self.handle_broadcast(channel, body, conn.clone()).into()
                     }
                     Message::Error { message } => {
                         warn!("Received an error message: {}", message);
-                        Ok(())
+                        Ok(super::router::CommandResponse::Ok)
+                    }
+                    Message::ChannelGetAll => {
+                        self.handle_channel_get_all()
                     }
                     _ => {
-                        Err(format!("Received an invalid message: {:?}", msg))
+                        Err(format!("Received an invalid message: {:?}", msg)).into()
                     }
                 };
 
@@ -72,7 +79,7 @@ impl ChannelStore {
 
     // Message handlers
 
-    fn handle_join(&mut self, channel: &String, conn: Connection) -> Result<(), String> {
+    fn handle_join(&mut self, channel: &String, conn: Connection) -> CommandResult {
         // TODO: Remove this, eventually all channels will have to be created first
         self.add_channel(channel);
 
@@ -97,15 +104,15 @@ impl ChannelStore {
         )
     }
 
-    fn handle_leave(&mut self, channel: &String, conn: Connection) -> Result<(), String> {
+    fn handle_leave(&mut self, channel: &String, conn: Connection) -> CommandResult {
         self.remove_connection(channel, conn.addr)
     }
 
-    fn handle_disconnect(&mut self, conn: Connection) -> Result<(), String> {
+    fn handle_disconnect(&mut self, conn: Connection) -> CommandResult {
         self.remove_connection_from_all(conn.addr)
     }
 
-    fn handle_broadcast(&mut self, channel: &String, body: Value, conn: Connection) -> Result<(), String> {
+    fn handle_broadcast(&mut self, channel: &String, body: Value, conn: Connection) -> CommandResult {
         let msg = Message::Broadcast {
             channel: channel.clone(),
             body,
@@ -116,8 +123,10 @@ impl ChannelStore {
 
     // Channel API handlers
 
-    fn handle_channel_get_all(&self) -> Result<Vec<String>, String> {
-        Ok(self.channels.keys().cloned().collect())
+    fn handle_channel_get_all(&self) -> CommandResult {
+        Ok(super::router::CommandResponse::ChannelGetAll(
+            self.channels.keys().cloned().collect(),
+        ))
     }
 
     // Internal API
@@ -147,7 +156,7 @@ impl ChannelStore {
         &mut self,
         channel_name: &String,
         conn: Connection,
-    ) -> Result<(), String> {
+    ) -> CommandResult {
         if let Some(channel) = self.channels.get_mut(channel_name) {
             let connections = &mut channel.connections;
 
@@ -159,7 +168,7 @@ impl ChannelStore {
             info!("Added connection for {}", conn.addr);
             connections.insert(conn.addr, conn);
 
-            return Ok(());
+            return Ok(super::router::CommandResponse::Ok);
         } else {
             return Err(format!("Channel {} does not exist", channel_name));
         }
@@ -169,7 +178,7 @@ impl ChannelStore {
         &mut self,
         channel_name: &String,
         addr: SocketAddr,
-    ) -> Result<(), String> {
+    ) -> CommandResult {
         let channel = self.channels.get_mut(channel_name);
 
         if let Some(channel) = channel {
@@ -199,10 +208,10 @@ impl ChannelStore {
 
         self.broadcast(&channel_name, msg.into(), addr.into())?;
 
-        return Ok(());
+        return Ok(super::router::CommandResponse::Ok);
     }
 
-    fn remove_connection_from_all(&mut self, addr: SocketAddr) -> Result<(), String> {
+    fn remove_connection_from_all(&mut self, addr: SocketAddr) -> CommandResult {
         let mut removed = Vec::new();
 
         // TODO: Rather than looping through all channels to remove the connection, have each
@@ -239,7 +248,7 @@ impl ChannelStore {
 
         info!("Removed connection for {}", addr);
 
-        return Ok(());
+        return Ok(super::router::CommandResponse::Ok);
     }
 
     fn has_channel(&self, channel_name: String) -> bool {
@@ -251,7 +260,7 @@ impl ChannelStore {
         channel_name: &String,
         message: WebSocketMessage,
         skip_addr: Option<SocketAddr>,
-    ) -> Result<(), String> {
+    ) -> CommandResult {
         if let Some(channel) = self.channels.get(channel_name) {
             let connections = &channel.connections;
 
@@ -270,7 +279,7 @@ impl ChannelStore {
                 }
             }
 
-            return Ok(());
+            return Ok(super::router::CommandResponse::Ok);
         } else {
             return Err(format!("Channel {} does not exist", channel_name));
         }

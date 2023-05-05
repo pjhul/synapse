@@ -81,7 +81,7 @@ impl Server {
 
         conn.listen(stream, &channels).await?;
 
-        channels.send_command(Message::Disconnect, conn).await.unwrap();
+        channels.send_command(Message::Disconnect, Some(conn)).await.unwrap();
 
         Ok(())
     }
