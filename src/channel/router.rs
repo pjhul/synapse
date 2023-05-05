@@ -31,13 +31,21 @@ impl ChannelRouter {
 
     pub async fn send_command(&self, msg: Message, conn: Connection) -> Result<(), String> {
         let (result, mut rx) = tokio::sync::oneshot::channel::<Result<(), String>>();
-        let cmd = Command { conn, msg, result: Some(result) };
+        let cmd = Command {
+            conn,
+            msg,
+            result: Some(result),
+        };
 
-        let (_, cmd_result) = join!(self.sender.send(cmd), async {
-            let result = rx.try_recv().unwrap();
-            result
-        });
+        self.sender.send(cmd).await.unwrap();
 
-        cmd_result
+        Ok(())
+
+        // let (_, cmd_result) = join!(self.sender.send(cmd), async {
+        //     let result = rx.try_recv().unwrap();
+        //     result
+        // });
+
+        // cmd_result
     }
 }

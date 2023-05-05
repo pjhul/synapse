@@ -38,7 +38,9 @@ impl ChannelStore {
             while let Some(cmd) = self.receiver.recv().await {
                 let Command { msg, conn, result } = cmd;
 
-                let result = match msg {
+                info!("Received message: {:?}", msg);
+
+                let cmd_result = match msg {
                     Message::Join {
                         ref channel,
                         presence,
@@ -52,7 +54,7 @@ impl ChannelStore {
                         self.handle_disconnect(conn.clone())
                     }
                     Message::Broadcast { ref channel, body } => {
-                        self.handle_broadcast(channel, body)
+                        self.handle_broadcast(channel, body, conn.clone())
                     }
                     Message::Error { message } => {
                         warn!("Received an error message: {}", message);
@@ -63,7 +65,7 @@ impl ChannelStore {
                     }
                 };
 
-                if let Err(e) = result {
+                if let Err(e) = cmd_result {
                     error!("{}", e);
 
                     conn.send(
@@ -75,6 +77,9 @@ impl ChannelStore {
                     .unwrap();
                 }
 
+                // if let Some(result) = result {
+                //     result.send(Ok(())).unwrap();
+                // }
             }
         });
     }
@@ -114,13 +119,13 @@ impl ChannelStore {
         self.remove_connection_from_all(conn.addr)
     }
 
-    fn handle_broadcast(&mut self, channel: &String, body: Value) -> Result<(), String> {
+    fn handle_broadcast(&mut self, channel: &String, body: Value, conn: Connection) -> Result<(), String> {
         let msg = Message::Broadcast {
             channel: channel.clone(),
             body,
         };
 
-        self.broadcast(channel, msg.into(), None)
+        self.broadcast(channel, msg.into(), Some(conn.addr))
     }
 
     // Internal API
