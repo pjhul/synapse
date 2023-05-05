@@ -1,7 +1,7 @@
 use std::{collections::HashMap, net::SocketAddr};
 
 use axum::extract::ws::Message as WebSocketMessage;
-use log::{error, info, warn};
+use log::{info, warn};
 use serde_json::Value;
 use tokio::sync::mpsc::Receiver;
 
@@ -38,9 +38,7 @@ impl ChannelStore {
             while let Some(cmd) = self.receiver.recv().await {
                 let Command { msg, conn, result } = cmd;
 
-                info!("Received message: {:?}", msg);
-
-                let cmd_result = match msg {
+                let cmd_result = match msg.clone() {
                     Message::Join {
                         ref channel,
                         presence,
@@ -65,21 +63,9 @@ impl ChannelStore {
                     }
                 };
 
-                if let Err(e) = cmd_result {
-                    error!("{}", e);
-
-                    conn.send(
-                        Message::Error {
-                            message: e
-                        }
-                        .into(),
-                    )
-                    .unwrap();
+                if let Some(result) = result {
+                    result.send(cmd_result).unwrap();
                 }
-
-                // if let Some(result) = result {
-                //     result.send(Ok(())).unwrap();
-                // }
             }
         });
     }
@@ -90,7 +76,7 @@ impl ChannelStore {
         // TODO: Remove this, eventually all channels will have to be created first
         self.add_channel(channel);
 
-        self.add_connection(channel, conn.clone())?;
+        self.add_connection(channel, conn)?;
 
         let channel = self.get_channel(channel).unwrap().clone();
 
@@ -273,7 +259,9 @@ impl ChannelStore {
                     None => {}
                 }
 
-                sender.send(message.clone()).unwrap();
+                if let Err(e) = sender.send(message.clone()) {
+                    return Err(format!("Error sending message to {}: {}", addr, e));
+                }
             }
 
             return Ok(());
