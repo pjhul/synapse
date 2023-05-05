@@ -19,6 +19,7 @@ pub type CommandResult = Result<CommandResponse, String>;
 pub enum CommandResponse {
     Ok,
     ChannelGetAll(Vec<String>),
+    ChannelCreate(String),
 }
 
 #[derive(Clone)]

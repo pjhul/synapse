@@ -65,6 +65,9 @@ impl ChannelStore {
                     Message::ChannelGetAll => {
                         self.handle_channel_get_all()
                     }
+                    Message::ChannelCreate { name } => {
+                        self.handle_channel_create(name)
+                    }
                     _ => {
                         Err(format!("Received an invalid message: {:?}", msg)).into()
                     }
@@ -127,6 +130,12 @@ impl ChannelStore {
         Ok(super::router::CommandResponse::ChannelGetAll(
             self.channels.keys().cloned().collect(),
         ))
+    }
+
+    fn handle_channel_create(&mut self, name: String) -> CommandResult {
+        self.add_channel(&name);
+
+        Ok(super::router::CommandResponse::ChannelCreate(name))
     }
 
     // Internal API
