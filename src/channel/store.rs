@@ -65,6 +65,9 @@ impl ChannelStore {
                     Message::ChannelGetAll => {
                         self.handle_channel_get_all()
                     }
+                    Message::ChannelGet { name } => {
+                        self.handle_channel_get(name)
+                    }
                     Message::ChannelCreate { name } => {
                         self.handle_channel_create(name)
                     }
@@ -130,6 +133,14 @@ impl ChannelStore {
         Ok(super::router::CommandResponse::ChannelGetAll(
             self.channels.keys().cloned().collect(),
         ))
+    }
+
+    fn handle_channel_get(&self, name: String) -> CommandResult {
+        if let Some(channel) = self.get_channel(&name) {
+            Ok(super::router::CommandResponse::ChannelGet(Some(channel.name.clone())))
+        } else {
+            Ok(super::router::CommandResponse::ChannelGet(None))
+        }
     }
 
     fn handle_channel_create(&mut self, name: String) -> CommandResult {
