@@ -42,10 +42,10 @@ async fn get_channels(Extension(channel_router): Extension<ChannelRouter>) -> im
 }
 
 async fn get_channel(
-    Path(id): Path<String>,
+    Path(name): Path<String>,
     Extension(channel_router): Extension<ChannelRouter>,
 ) -> impl IntoResponse {
-    let res = channel_router.send_command(Message::ChannelGet { name: id.to_string() }, None).await;
+    let res = channel_router.send_command(Message::ChannelGet { name: name.to_string() }, None).await;
 
     match res {
         Ok(CommandResponse::ChannelGet(channel)) => {
@@ -62,7 +62,7 @@ async fn get_channel(
 }
 
 async fn update_channel(
-    Path(_id): Path<String>,
+    Path(_name): Path<String>,
     Extension(_channel_router): Extension<ChannelRouter>,
     _req: Request<Body>,
 ) -> impl IntoResponse {
@@ -70,10 +70,10 @@ async fn update_channel(
 }
 
 async fn delete_channel(
-    Path(id): Path<String>,
+    Path(name): Path<String>,
     Extension(channel_router): Extension<ChannelRouter>,
 ) -> impl IntoResponse {
-    let res = channel_router.send_command(Message::ChannelDelete { name: id.to_string() }, None).await;
+    let res = channel_router.send_command(Message::ChannelDelete { name: name.to_string() }, None).await;
 
     match res {
         Ok(CommandResponse::ChannelDelete(name)) => {
@@ -87,6 +87,6 @@ async fn delete_channel(
 pub fn channel_routes(channels: ChannelRouter) -> Router {
     Router::new()
         .route("/channels", post(create_channel).get(get_channels))
-        .route("/channels/:id", get(get_channel).put(update_channel).delete(delete_channel))
+        .route("/channels/:name", get(get_channel).put(update_channel).delete(delete_channel))
         .layer(Extension(channels))
 }
