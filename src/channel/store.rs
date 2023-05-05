@@ -2,16 +2,12 @@ use std::{collections::HashMap, net::SocketAddr};
 
 use axum::extract::ws::Message as WebSocketMessage;
 use log::{error, info, warn};
-use tokio::sync::mpsc::{Receiver, Sender};
+use tokio::sync::mpsc::Receiver;
 
 use crate::connection::Connection;
 use crate::message::Message;
 
-#[derive(Debug)]
-pub struct Command {
-    pub conn: Connection,
-    pub msg: Message,
-}
+use super::router::Command;
 
 #[derive(Clone, Debug)]
 pub struct Channel {
@@ -20,7 +16,7 @@ pub struct Channel {
 }
 
 #[derive(Debug)]
-pub struct ChannelMap {
+pub struct ChannelStore {
     receiver: Receiver<Command>,
     // TODO: When we switch back to a mutex, should probably restructure this into a sharded Mutex, and potentially use an RwLock
     // instead as well
@@ -28,31 +24,9 @@ pub struct ChannelMap {
     pub channels: HashMap<String, Channel>,
 }
 
-#[derive(Clone)]
-pub struct ChannelRouter {
-    sender: Sender<Command>,
-}
-
-impl ChannelRouter {
-    pub fn new(tx: Sender<Command>, rx: Receiver<Command>) -> Self {
-        let channel_map = ChannelMap::new(rx);
-        channel_map.run();
-
-        ChannelRouter { sender: tx }
-    }
-
-    pub async fn send_command(&self, msg: Message, conn: Connection) {
-        let cmd = Command { conn, msg };
-
-        // TODO: Listen for result here
-
-        self.sender.send(cmd).await.unwrap();
-    }
-}
-
-impl ChannelMap {
+impl ChannelStore {
     pub fn new(rx: Receiver<Command>) -> Self {
-        ChannelMap {
+        Self {
             receiver: rx,
             channels: HashMap::new(),
         }
@@ -61,7 +35,7 @@ impl ChannelMap {
     pub fn run(mut self) {
         tokio::spawn(async move {
             while let Some(cmd) = self.receiver.recv().await {
-                let Command { msg, conn } = cmd;
+                let Command { msg, conn, result } = cmd;
 
                 // FIXME: This is messy, we should branch and encapsulate this logic better
                 match msg {
@@ -72,12 +46,17 @@ impl ChannelMap {
                         self.add_channel(channel);
 
                         if let Err(e) = self.add_connection(channel, conn.clone()) {
-                            // TODO: Package this up into a helper function
-                            error!("Failed to add connection: {}", e);
+                            let err_msg = format!("Failed to add connection: {}", e);
+
+                            error!("{}", err_msg);
+
+                            if let Some(result) = result {
+                                result.send(Err(err_msg.clone())).unwrap();
+                            }
 
                             conn.send(
                                 Message::Error {
-                                    message: format!("Failed to add connection: {}", e),
+                                    message: err_msg.clone(),
                                 }
                                 .into(),
                             )
@@ -85,7 +64,7 @@ impl ChannelMap {
                         } else {
                             let channel = self.get_channel(channel).unwrap().clone();
 
-                            self.broadcast(
+                            let cmd_result = self.broadcast(
                                 &channel.name,
                                 WebSocketMessage::Text(
                                     Message::Presence {
@@ -99,8 +78,18 @@ impl ChannelMap {
                                     .into(),
                                 ),
                                 None
-                            )
-                            .unwrap();
+                            );
+
+                            match cmd_result {
+                                Ok(_) => {
+                                    if let Some(result) = result {
+                                        result.send(Ok(())).unwrap();
+                                    }
+                                }
+                                Err(e) => {
+                                    error!("Failed to broadcast presence message: {}", e);
+                                }
+                            }
                         }
                     }
                     Message::Leave { ref channel } => {
@@ -171,6 +160,17 @@ impl ChannelMap {
                 }
             }
         });
+    }
+
+    pub fn handle_channels_message(msg: Message) {
+        match msg {
+            Message::ChannelGetAll => {
+
+            }
+            _ => {
+                error!("Received an invalid message: {:?}", msg);
+            }
+        }
     }
 
     pub fn get_channel(&self, name: &String) -> Option<&Channel> {
