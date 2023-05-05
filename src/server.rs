@@ -13,7 +13,7 @@ use axum::{
 use log::info;
 use tokio::sync::mpsc;
 
-use crate::{channel::{Command, ChannelRouter}, connection::Connection};
+use crate::{channel::router::{Command, ChannelRouter}, connection::Connection};
 use crate::message::Message;
 use crate::metrics::Metrics;
 use crate::api::channels::channel_routes;

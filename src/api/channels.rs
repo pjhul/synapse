@@ -1,15 +1,12 @@
 use axum::{
     body::Body,
-    routing::{get, post, put, delete},
-    http::{Request, Response},
+    routing::{get, post},
+    http::Request,
     extract::{Extension, Path},
     Router, response::IntoResponse,
 };
-use serde::{Deserialize, Serialize};
-use std::sync::Arc;
-use tokio::sync::RwLock;
 
-use crate::channel::ChannelRouter;
+use crate::channel::router::ChannelRouter;
 
 async fn create_channel(
     Extension(channel_router): Extension<ChannelRouter>,

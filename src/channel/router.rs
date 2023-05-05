@@ -1,13 +1,11 @@
-use std::{collections::HashMap, net::SocketAddr};
-
-use axum::extract::ws::Message as WebSocketMessage;
-use log::{error, info, warn};
 use tokio::join;
 use tokio::sync::mpsc::{Receiver, Sender};
 use tokio::sync::oneshot::Sender as OneshotSender;
 
 use crate::connection::Connection;
 use crate::message::Message;
+
+use super::store::ChannelStore;
 
 #[derive(Debug)]
 pub struct Command {
@@ -22,10 +20,10 @@ pub struct ChannelRouter {
 }
 
 /// Public interface for interracting with Channels. Effectively just a wrapper around the
-/// MPSC Sender for Commands to the inner ChannelMap
+/// MPSC Sender for Commands to the inner ChannelStore
 impl ChannelRouter {
     pub fn new(tx: Sender<Command>, rx: Receiver<Command>) -> Self {
-        let channel_map = ChannelMap::new(rx);
+        let channel_map = ChannelStore::new(rx);
         channel_map.run();
 
         ChannelRouter { sender: tx }

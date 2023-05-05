@@ -10,7 +10,7 @@ use tokio::sync::mpsc::{error::SendError, UnboundedSender};
 
 use tokio_stream::wrappers::UnboundedReceiverStream;
 
-use crate::channel::ChannelRouter;
+use crate::channel::router::ChannelRouter;
 use crate::message::Message;
 use crate::metrics::Metrics;
 
