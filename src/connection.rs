@@ -4,13 +4,13 @@ use axum::extract::ws::{Message as WebSocketMessage, WebSocket};
 
 use futures_util::future::select;
 use futures_util::{pin_mut, StreamExt, TryStreamExt};
-use log::warn;
+use log::{warn, info, error};
 use tokio::sync::mpsc::unbounded_channel;
 use tokio::sync::mpsc::{error::SendError, UnboundedSender};
 
 use tokio_stream::wrappers::UnboundedReceiverStream;
 
-use crate::channel::ChannelRouter;
+use crate::channel::router::ChannelRouter;
 use crate::message::Message;
 use crate::metrics::Metrics;
 
@@ -68,7 +68,19 @@ impl Connection {
                         }
                     };
 
-                    channels.send_command(msg, self_clone).await;
+                    let result = channels.send_command(msg.clone(), self_clone.clone()).await;
+
+                    if let Err(e) = result {
+                        error!("{}", e);
+
+                        self_clone.send(
+                            Message::Error {
+                                message: e
+                            }
+                            .into(),
+                        )
+                        .unwrap();
+                    }
                 } else {
                     warn!("Received a non-text message");
                 }

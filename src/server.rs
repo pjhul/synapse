@@ -13,9 +13,10 @@ use axum::{
 use log::info;
 use tokio::sync::mpsc;
 
-use crate::{channel::{Command, ChannelRouter}, connection::Connection};
+use crate::{channel::router::{Command, ChannelRouter}, connection::Connection};
 use crate::message::Message;
 use crate::metrics::Metrics;
+use crate::api::channels::channel_routes;
 
 pub struct Server {}
 
@@ -30,7 +31,9 @@ impl Server {
         let (tx, rx) = mpsc::channel::<Command>(1024);
         let channels = ChannelRouter::new(tx, rx);
 
-        let app = Router::new().route(
+        let channel_router = channel_routes(channels.clone());
+
+        let ws_router = Router::new().route(
             "/ws",
             get(
                 move |ws: WebSocketUpgrade, conn_info: ConnectInfo<SocketAddr>| {
@@ -39,6 +42,9 @@ impl Server {
             ),
         );
 
+        let app = Router::new()
+            .nest("/api", channel_router)
+            .nest("/", ws_router);
 
         self.run_server(app, addr).await
     }
@@ -75,7 +81,7 @@ impl Server {
 
         conn.listen(stream, &channels).await?;
 
-        channels.send_command(Message::Disconnect, conn).await;
+        channels.send_command(Message::Disconnect, conn).await.unwrap();
 
         Ok(())
     }

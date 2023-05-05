@@ -27,6 +27,31 @@ pub enum Message {
     Error {
         message: String,
     },
+
+    // Channel API
+    ChannelGetAll,
+    ChannelGet {
+        name: String,
+    },
+    ChannelCreate {
+        name: String,
+    },
+    ChannelDelete {
+        name: String,
+    },
+}
+
+pub enum ChannelApiMessage {
+    GetChannels,
+    CreateChannel {
+        name: String,
+    },
+    DeleteChannel {
+        name: String,
+    },
+    GetChannel {
+        name: String,
+    },
 }
 
 impl FromStr for Message {
