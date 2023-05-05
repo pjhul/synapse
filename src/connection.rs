@@ -18,6 +18,7 @@ pub type ConnectionSender = UnboundedSender<WebSocketMessage>;
 
 #[derive(Clone, Debug)]
 pub struct Connection {
+    pub id: String,
     pub addr: SocketAddr,
     // The lifetime of the connection should mirror the lifetime of the websocket itself
     // pub stream: &'a mut WebSocket,
@@ -28,7 +29,9 @@ pub struct Connection {
 
 impl Connection {
     pub fn new(addr: SocketAddr) -> Self {
-        Self { addr, sender: None }
+        let id = uuid::Uuid::new_v4().to_string();
+
+        Self { id, addr, sender: None }
     }
 
     /**
