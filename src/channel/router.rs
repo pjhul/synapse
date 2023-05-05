@@ -21,6 +21,7 @@ pub enum CommandResponse {
     ChannelGetAll(Vec<String>),
     ChannelCreate(String),
     ChannelGet(Option<String>),
+    ChannelDelete(String),
 }
 
 #[derive(Clone)]

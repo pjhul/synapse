@@ -62,18 +62,26 @@ async fn get_channel(
 }
 
 async fn update_channel(
-    Path(id): Path<String>,
-    Extension(channel_router): Extension<ChannelRouter>,
-    req: Request<Body>,
+    Path(_id): Path<String>,
+    Extension(_channel_router): Extension<ChannelRouter>,
+    _req: Request<Body>,
 ) -> impl IntoResponse {
-    // Your implementation here
+    unimplemented!("There is nothing to update on a channel yet")
 }
 
 async fn delete_channel(
     Path(id): Path<String>,
     Extension(channel_router): Extension<ChannelRouter>,
 ) -> impl IntoResponse {
-    // Your implementation here
+    let res = channel_router.send_command(Message::ChannelDelete { name: id.to_string() }, None).await;
+
+    match res {
+        Ok(CommandResponse::ChannelDelete(name)) => {
+            (StatusCode::OK, name).into_response()
+        }
+        Ok(_) => (StatusCode::INTERNAL_SERVER_ERROR, "Internal Server Error".to_string()).into_response(),
+        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e).into_response(),
+    }
 }
 
 pub fn channel_routes(channels: ChannelRouter) -> Router {

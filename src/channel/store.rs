@@ -71,6 +71,9 @@ impl ChannelStore {
                     Message::ChannelCreate { name } => {
                         self.handle_channel_create(name)
                     }
+                    Message::ChannelDelete { name } => {
+                        self.handle_channel_delete(name)
+                    }
                     _ => {
                         Err(format!("Received an invalid message: {:?}", msg)).into()
                     }
@@ -149,6 +152,12 @@ impl ChannelStore {
         Ok(super::router::CommandResponse::ChannelCreate(name))
     }
 
+    fn handle_channel_delete(&mut self, name: String) -> CommandResult {
+        self.remove_channel(&name);
+
+        Ok(super::router::CommandResponse::ChannelDelete(name))
+    }
+
     // Internal API
 
     fn get_channel(&self, name: &String) -> Option<&Channel> {
@@ -159,7 +168,6 @@ impl ChannelStore {
         let channels = &mut self.channels;
 
         if channels.contains_key(name) {
-            info!("Channel {} already exists", name);
             return;
         }
 
@@ -170,6 +178,14 @@ impl ChannelStore {
                 connections: HashMap::new(),
             },
         );
+    }
+
+    fn remove_channel(&mut self, name: &String) {
+        let channels = &mut self.channels;
+
+        if channels.contains_key(name) {
+            channels.remove(name);
+        }
     }
 
     fn add_connection(
