@@ -16,10 +16,27 @@ pub struct ChannelMap {
 
 impl ChannelMap {
     pub fn new() -> Self {
-        let db = ChannelStorage::new("channels");
+        let db = ChannelStorage::new("db");
+
+        let channels = db.get_channels().unwrap_or_else(|e| {
+            panic!("Error loading channels from DB: {}", e);
+        });
+
+        let channel_map = channels
+            .into_iter()
+            .map(|c| {
+                (
+                    c.clone(),
+                    Channel {
+                        name: c.clone(),
+                        connections: HashMap::new(),
+                    },
+                )
+            })
+            .collect();
 
         Self {
-            channels: HashMap::new(),
+            channels: channel_map,
             db,
         }
     }
