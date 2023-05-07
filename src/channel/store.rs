@@ -15,17 +15,13 @@ pub struct ChannelStore {
     // instead as well
     // See: https://docs.rs/dashmap/latest/dashmap/
     pub channels: ChannelMap,
-    db: ChannelStorage,
 }
 
 impl ChannelStore {
     pub fn new(rx: Receiver<Command>) -> Self {
-        let db = ChannelStorage::new("channels");
-
         Self {
             receiver: rx,
             channels: ChannelMap::new(),
-            db,
         }
     }
 

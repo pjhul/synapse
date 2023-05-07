@@ -6,17 +6,21 @@ use log::info;
 use crate::connection::Connection;
 use crate::message::Message;
 
-use super::{router::{CommandResult}, Channel};
+use super::{router::{CommandResult}, Channel, storage::ChannelStorage};
 
 #[derive(Debug)]
 pub struct ChannelMap {
     pub channels: HashMap<String, Channel>,
+    db: ChannelStorage,
 }
 
 impl ChannelMap {
     pub fn new() -> Self {
+        let db = ChannelStorage::new("channels");
+
         Self {
             channels: HashMap::new(),
+            db,
         }
     }
 
