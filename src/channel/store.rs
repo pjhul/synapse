@@ -42,19 +42,19 @@ impl ChannelStore {
                         presence: _,
                     } => {
                         let conn = conn.unwrap();
-                        self.handle_join(channel, conn.clone()).into()
+                        self.handle_join(channel, conn.clone())
                     }
                     Message::Leave { ref channel } => {
                         let conn = conn.unwrap();
-                        self.handle_leave(channel, conn.clone()).into()
+                        self.handle_leave(channel, conn.clone())
                     }
                     Message::Disconnect => {
                         let conn = conn.unwrap();
-                        self.handle_disconnect(conn.clone()).into()
+                        self.handle_disconnect(conn.clone())
                     }
                     Message::Broadcast { ref channel, body } => {
                         let conn = conn.unwrap();
-                        self.handle_broadcast(channel, body, conn.clone()).into()
+                        self.handle_broadcast(channel, body, conn.clone())
                     }
                     Message::Error { message } => {
                         warn!("Received an error message: {}", message);
@@ -64,7 +64,7 @@ impl ChannelStore {
                     Message::ChannelGet { name } => self.handle_channel_get(name),
                     Message::ChannelCreate { name } => self.handle_channel_create(name),
                     Message::ChannelDelete { name } => self.handle_channel_delete(name),
-                    _ => Err(format!("Received an invalid message: {:?}", msg)).into(),
+                    _ => Err(format!("Received an invalid message: {:?}", msg)),
                 };
 
                 if let Some(result) = result {

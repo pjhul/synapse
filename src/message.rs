@@ -56,14 +56,14 @@ impl FromStr for Message {
     }
 }
 
-impl Into<String> for Message {
-    fn into(self) -> String {
-        serde_json::to_string(&self).unwrap()
+impl From<Message> for String {
+    fn from(msg: Message) -> Self {
+        serde_json::to_string(&msg).unwrap()
     }
 }
 
-impl Into<WebSocketMessage> for Message {
-    fn into(self) -> WebSocketMessage {
-        WebSocketMessage::Text(self.into())
+impl From<Message> for WebSocketMessage {
+    fn from(msg: Message) -> Self {
+        WebSocketMessage::Text(msg.into())
     }
 }

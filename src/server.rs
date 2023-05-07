@@ -62,7 +62,6 @@ impl Server {
         channels: ChannelRouter,
     ) -> impl IntoResponse {
         info!("New connection from: {}", addr);
-        let channels = channels.clone();
 
         ws.on_upgrade(move |socket| async move {
             tokio::spawn(async move {
@@ -89,6 +88,12 @@ impl Server {
             .unwrap();
 
         Ok(())
+    }
+}
+
+impl Default for Server {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

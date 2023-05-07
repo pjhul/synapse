@@ -1,6 +1,6 @@
 use std::env;
 
-use synapse::metrics::get_metrics;
+// use synapse::metrics::get_metrics;
 use synapse::server::Server;
 
 #[tokio::main]

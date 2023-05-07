@@ -50,6 +50,12 @@ impl MetricsHub {
     }
 }
 
+impl Default for MetricsHub {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 lazy_static! {
     static ref METRICS_HUB: MetricsHub = MetricsHub::new();
 }

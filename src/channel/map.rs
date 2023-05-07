@@ -33,7 +33,7 @@ impl<S: Storage> ChannelMap<S> {
                 (
                     c.clone(),
                     Channel {
-                        name: c.clone(),
+                        name: c,
                         connections: HashMap::new(),
                     },
                 )
@@ -106,9 +106,9 @@ impl<S: Storage> ChannelMap<S> {
             info!("Added connection for {}", conn.addr);
             connections.insert(conn.addr, conn);
 
-            return Ok(super::router::CommandResponse::Ok);
+            Ok(super::router::CommandResponse::Ok)
         } else {
-            return Err(format!("Channel {} does not exist", channel_name));
+            Err(format!("Channel {} does not exist", channel_name))
         }
     }
 
@@ -140,9 +140,9 @@ impl<S: Storage> ChannelMap<S> {
                 .collect(),
         };
 
-        self.broadcast(&channel_name, msg.into(), addr.into())?;
+        self.broadcast(channel_name, msg.into(), addr.into())?;
 
-        return Ok(super::router::CommandResponse::Ok);
+        Ok(super::router::CommandResponse::Ok)
     }
 
     pub fn remove_connection_from_all(&mut self, addr: SocketAddr) -> CommandResult {
@@ -157,7 +157,7 @@ impl<S: Storage> ChannelMap<S> {
 
                 removed.push(name.clone());
 
-                if channel.connections.len() == 0 {
+                if channel.connections.is_empty() {
                     // self.channels.remove(&channel.name);
                 }
             }
@@ -182,7 +182,7 @@ impl<S: Storage> ChannelMap<S> {
 
         info!("Removed connection for {}", addr);
 
-        return Ok(super::router::CommandResponse::Ok);
+        Ok(super::router::CommandResponse::Ok)
     }
 
     pub fn broadcast(
@@ -195,13 +195,10 @@ impl<S: Storage> ChannelMap<S> {
             let connections = &channel.connections;
 
             for (addr, sender) in connections.iter() {
-                match skip_addr {
-                    Some(skip_addr) => {
-                        if *addr == skip_addr {
-                            continue;
-                        }
+                if let Some(skip_addr) = skip_addr {
+                    if *addr == skip_addr {
+                        continue;
                     }
-                    None => {}
                 }
 
                 if let Err(e) = sender.send(message.clone()) {
@@ -209,9 +206,9 @@ impl<S: Storage> ChannelMap<S> {
                 }
             }
 
-            return Ok(super::router::CommandResponse::Ok);
+            Ok(super::router::CommandResponse::Ok)
         } else {
-            return Err(format!("Channel {} does not exist", channel_name));
+            Err(format!("Channel {} does not exist", channel_name))
         }
     }
 }

@@ -1,4 +1,5 @@
 #!/usr/bin/env sh
 . "$(dirname -- "$0")/_/husky.sh"
 
-cargo fmt && cargo clippy && cargo test
+# TODO: only format staged files and add them to the commit
+cargo fmt && cargo clippy --bin "synapse" && cargo test
