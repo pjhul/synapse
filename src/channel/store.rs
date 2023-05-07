@@ -9,7 +9,7 @@ use crate::message::Message;
 use super::{
     map::ChannelMap,
     router::{Command, CommandResult},
-    storage::ChannelStorage,
+    storage::{ChannelStorage, Storage},
 };
 
 #[derive(Debug)]
@@ -18,14 +18,16 @@ pub struct ChannelStore {
     // TODO: When we switch back to a mutex, should probably restructure this into a sharded Mutex, and potentially use an RwLock
     // instead as well
     // See: https://docs.rs/dashmap/latest/dashmap/
-    pub channels: ChannelMap,
+    pub channels: ChannelMap<ChannelStorage>,
 }
 
 impl ChannelStore {
     pub fn new(rx: Receiver<Command>) -> Self {
+        let storage = ChannelStorage::new("db");
+
         Self {
             receiver: rx,
-            channels: ChannelMap::new(),
+            channels: ChannelMap::new(storage),
         }
     }
 
@@ -76,7 +78,7 @@ impl ChannelStore {
 
     fn handle_join(&mut self, channel: &String, conn: Connection) -> CommandResult {
         // TODO: Remove this, eventually all channels will have to be created first
-        self.channels.add_channel(channel);
+        self.channels.add_channel(channel)?;
 
         self.channels.add_connection(channel, conn)?;
 
@@ -141,13 +143,13 @@ impl ChannelStore {
     }
 
     fn handle_channel_create(&mut self, name: String) -> CommandResult {
-        self.channels.add_channel(&name);
+        self.channels.add_channel(&name)?;
 
         Ok(super::router::CommandResponse::ChannelCreate(name))
     }
 
     fn handle_channel_delete(&mut self, name: String) -> CommandResult {
-        self.channels.remove_channel(&name);
+        self.channels.remove_channel(&name)?;
 
         Ok(super::router::CommandResponse::ChannelDelete(name))
     }

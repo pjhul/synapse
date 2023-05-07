@@ -6,17 +6,22 @@ use log::info;
 use crate::connection::Connection;
 use crate::message::Message;
 
-use super::{router::CommandResult, storage::ChannelStorage, Channel};
+use super::{router::CommandResult, storage::Storage, Channel};
 
 #[derive(Debug)]
-pub struct ChannelMap {
+pub struct ChannelMap<S: Storage> {
     pub channels: HashMap<String, Channel>,
-    db: ChannelStorage,
+    db: S,
 }
 
-impl ChannelMap {
-    pub fn new() -> Self {
-        let db = ChannelStorage::new("db");
+impl<S: Storage> ChannelMap<S> {
+    pub fn new(db: S) -> Self {
+        // Eventually we could consider having some code like this to automatically switch between a mock DB and a real DB
+        // let db = if cfg!(test) {
+        //     MockStorageBackend {}
+        // } else {
+        //     ChannelStorage::new("db")
+        // };
 
         let channels = db.get_channels().unwrap_or_else(|e| {
             panic!("Error loading channels from DB: {}", e);
@@ -208,5 +213,162 @@ impl ChannelMap {
         } else {
             return Err(format!("Channel {} does not exist", channel_name));
         }
+    }
+}
+
+// Tests are included only when running tests
+#[cfg(test)]
+mod tests {
+    use futures_util::FutureExt;
+    use tokio::sync::mpsc::unbounded_channel;
+    use tokio_stream::{wrappers::UnboundedReceiverStream, StreamExt};
+    use uuid::Uuid;
+
+    use crate::channel::storage::tests::MockChannelStorage;
+    use crate::connection::ConnectionSender;
+
+    use super::*;
+
+    fn create_channel_map() -> ChannelMap<MockChannelStorage> {
+        ChannelMap::new(MockChannelStorage::new("/tmp/test.db"))
+    }
+
+    fn create_socket_addr() -> SocketAddr {
+        "127.0.0.1:8080".parse::<SocketAddr>().unwrap()
+    }
+
+    fn create_sender() -> ConnectionSender {
+        let (_tx, _rx) = unbounded_channel();
+        _tx
+    }
+
+    fn create_connection() -> Connection {
+        Connection {
+            id: Uuid::new_v4().to_string(),
+            addr: create_socket_addr(),
+            sender: Some(create_sender()),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_add_channel() {
+        let mut channel_map = create_channel_map();
+        let channel_name = String::from("test_channel");
+
+        channel_map.add_channel(&channel_name).unwrap();
+
+        assert!(channel_map.has_channel(channel_name));
+    }
+
+    #[tokio::test]
+    async fn test_add_connection() {
+        let mut channel_map = create_channel_map();
+        let channel_name = String::from("test_channel");
+        let conn = create_connection();
+
+        channel_map.add_channel(&channel_name).unwrap();
+        channel_map
+            .add_connection(&channel_name, conn.clone())
+            .unwrap();
+
+        let channels = channel_map.channels;
+        let channel = channels.get(&channel_name).unwrap();
+        let connections = &channel.connections;
+
+        assert!(connections.contains_key(&conn.addr));
+    }
+
+    #[tokio::test]
+    async fn test_remove_connection() {
+        let mut channel_map = create_channel_map();
+        let channel_name = String::from("test_channel");
+        let conn = create_connection();
+
+        channel_map.add_channel(&channel_name).unwrap();
+        channel_map
+            .add_connection(&channel_name, conn.clone())
+            .unwrap();
+
+        channel_map
+            .remove_connection(&channel_name, conn.addr)
+            .unwrap();
+
+        let channels = channel_map.channels;
+        let channel = channels.get(&channel_name).unwrap();
+        let connections = &channel.connections;
+
+        assert!(!connections.contains_key(&conn.addr));
+    }
+
+    #[tokio::test]
+    async fn test_remove_connection_from_all() {
+        let mut channel_map = create_channel_map();
+        let channel_name = String::from("test_channel");
+        let conn = create_connection();
+
+        channel_map.add_channel(&channel_name).unwrap();
+        channel_map
+            .add_connection(&channel_name, conn.clone())
+            .unwrap();
+
+        channel_map.remove_connection_from_all(conn.addr).unwrap();
+
+        let channels = channel_map.channels;
+        let channel = channels.get(&channel_name).unwrap();
+        let connections = &channel.connections;
+
+        assert!(!connections.contains_key(&conn.addr));
+    }
+
+    #[tokio::test]
+    async fn test_has_channel() {
+        let mut channel_map = create_channel_map();
+        let channel_name = String::from("test_channel");
+
+        assert!(!channel_map.has_channel(channel_name.clone()));
+
+        channel_map.add_channel(&channel_name).unwrap();
+
+        assert!(channel_map.has_channel(channel_name));
+    }
+
+    #[tokio::test]
+    async fn test_broadcast() {
+        let mut channel_map = create_channel_map();
+        let channel_name = String::from("test_channel");
+
+        let (sender1, receiver1) = unbounded_channel();
+        let (sender2, receiver2) = unbounded_channel();
+
+        let conn1 = Connection {
+            id: Uuid::new_v4().to_string(),
+            addr: "127.0.0.1:8080".parse::<SocketAddr>().unwrap(),
+            sender: Some(sender1),
+        };
+
+        let conn2 = Connection {
+            id: Uuid::new_v4().to_string(),
+            addr: "127.0.0.2:8080".parse::<SocketAddr>().unwrap(),
+            sender: Some(sender2),
+        };
+
+        let skip_addr = conn1.addr;
+
+        channel_map.add_channel(&channel_name).unwrap();
+        channel_map.add_connection(&channel_name, conn1).unwrap();
+        channel_map.add_connection(&channel_name, conn2).unwrap();
+
+        let msg_text = "Hello, world!";
+        let message = WebSocketMessage::Text(msg_text.to_owned());
+        channel_map
+            .broadcast(&channel_name, message.clone(), Some(skip_addr))
+            .unwrap();
+
+        let mut receiver1 = UnboundedReceiverStream::new(receiver1);
+        let mut receiver2 = UnboundedReceiverStream::new(receiver2);
+
+        assert!(receiver1.next().now_or_never().is_none());
+        let received_msg = receiver2.next().await.unwrap();
+        assert_eq!(received_msg, message)
     }
 }
