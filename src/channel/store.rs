@@ -6,7 +6,7 @@ use tokio::sync::mpsc::Receiver;
 use crate::connection::Connection;
 use crate::message::Message;
 
-use super::{router::{Command, CommandResult}, map::ChannelMap};
+use super::{router::{Command, CommandResult}, map::ChannelMap, storage::ChannelStorage};
 
 #[derive(Debug)]
 pub struct ChannelStore {
@@ -15,13 +15,17 @@ pub struct ChannelStore {
     // instead as well
     // See: https://docs.rs/dashmap/latest/dashmap/
     pub channels: ChannelMap,
+    db: ChannelStorage,
 }
 
 impl ChannelStore {
     pub fn new(rx: Receiver<Command>) -> Self {
+        let db = ChannelStorage::new("channels");
+
         Self {
             receiver: rx,
             channels: ChannelMap::new(),
+            db,
         }
     }
 
