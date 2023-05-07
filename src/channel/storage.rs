@@ -23,6 +23,12 @@ impl ChannelStorage {
         Ok(())
     }
 
+    pub fn remove_channel(&self, name: &str) -> Result<(), rocksdb::Error> {
+        let mut db = self.db.lock().unwrap();
+        db.delete(name.as_bytes())?;
+        Ok(())
+    }
+
     pub fn get_channels(&self) -> Result<Vec<String>, rocksdb::Error> {
         let db = self.db.lock().unwrap();
         let cf = db.cf_handle("default").unwrap();

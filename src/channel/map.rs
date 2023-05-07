@@ -32,28 +32,40 @@ impl ChannelMap {
         self.channels.get(name)
     }
 
-    pub fn add_channel(&mut self, name: &String) {
+    pub fn add_channel(&mut self, name: &String) -> Result<(), String> {
+        // We update the DB first here as that can fail but the write to the hashmap cannot, and so
+        // no rollback is needed. I think we'll still need more robust logic here to keep these two
+        // in-sync
+        self.db.create_channel(name)?;
+
         let channels = &mut self.channels;
 
         if channels.contains_key(name) {
-            return;
+            // TODO: Unclear if we should fail here or not, but I'm leaning towards not failing
+            // return Err(format!("Channel {} already exists", name));
+        } else {
+            channels.insert(
+                name.clone(),
+                Channel {
+                    name: name.clone(),
+                    connections: HashMap::new(),
+                },
+            );
         }
 
-        channels.insert(
-            name.clone(),
-            Channel {
-                name: name.clone(),
-                connections: HashMap::new(),
-            },
-        );
+        Ok(())
     }
 
-    pub fn remove_channel(&mut self, name: &String) {
+    pub fn remove_channel(&mut self, name: &String) -> Result<(), String> {
+        self.db.remove_channel(name)?;
+
         let channels = &mut self.channels;
 
         if channels.contains_key(name) {
             channels.remove(name);
         }
+
+        Ok(())
     }
 
     pub fn add_connection(
