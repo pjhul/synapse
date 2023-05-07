@@ -77,7 +77,7 @@ impl Server {
         addr: SocketAddr,
         channels: ChannelRouter
     ) -> Result<(), Box<dyn std::error::Error>> {
-        let mut conn = Connection::new(addr);
+        let mut conn = Connection::new(None, addr);
 
         conn.listen(stream, &channels).await?;
 

@@ -4,7 +4,7 @@ use axum::extract::ws::{Message as WebSocketMessage, WebSocket};
 
 use futures_util::future::select;
 use futures_util::{pin_mut, StreamExt, TryStreamExt};
-use log::{warn, info, error};
+use log::{warn, error};
 use tokio::sync::mpsc::unbounded_channel;
 use tokio::sync::mpsc::{error::SendError, UnboundedSender};
 
@@ -18,6 +18,7 @@ pub type ConnectionSender = UnboundedSender<WebSocketMessage>;
 
 #[derive(Clone, Debug)]
 pub struct Connection {
+    pub id: String,
     pub addr: SocketAddr,
     // The lifetime of the connection should mirror the lifetime of the websocket itself
     // pub stream: &'a mut WebSocket,
@@ -27,8 +28,10 @@ pub struct Connection {
 }
 
 impl Connection {
-    pub fn new(addr: SocketAddr) -> Self {
-        Self { addr, sender: None }
+    pub fn new(id: Option<String>, addr: SocketAddr) -> Self {
+        let id = id.or_else(|| Some(uuid::Uuid::new_v4().to_string())).unwrap();
+
+        Self { id, addr, sender: None }
     }
 
     /**
