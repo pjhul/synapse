@@ -39,7 +39,7 @@ impl ChannelStore {
                 let cmd_result: CommandResult = match msg.clone() {
                     Message::Join {
                         ref channel,
-                        presence,
+                        presence: _,
                     } => {
                         let conn = conn.unwrap();
                         self.handle_join(channel, conn.clone()).into()
