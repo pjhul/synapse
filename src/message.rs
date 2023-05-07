@@ -43,15 +43,9 @@ pub enum Message {
 
 pub enum ChannelApiMessage {
     GetChannels,
-    CreateChannel {
-        name: String,
-    },
-    DeleteChannel {
-        name: String,
-    },
-    GetChannel {
-        name: String,
-    },
+    CreateChannel { name: String },
+    DeleteChannel { name: String },
+    GetChannel { name: String },
 }
 
 impl FromStr for Message {

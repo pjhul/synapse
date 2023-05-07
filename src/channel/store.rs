@@ -6,7 +6,11 @@ use tokio::sync::mpsc::Receiver;
 use crate::connection::Connection;
 use crate::message::Message;
 
-use super::{router::{Command, CommandResult}, map::ChannelMap, storage::ChannelStorage};
+use super::{
+    map::ChannelMap,
+    router::{Command, CommandResult},
+    storage::ChannelStorage,
+};
 
 #[derive(Debug)]
 pub struct ChannelStore {
@@ -54,21 +58,11 @@ impl ChannelStore {
                         warn!("Received an error message: {}", message);
                         Ok(super::router::CommandResponse::Ok)
                     }
-                    Message::ChannelGetAll => {
-                        self.handle_channel_get_all()
-                    }
-                    Message::ChannelGet { name } => {
-                        self.handle_channel_get(name)
-                    }
-                    Message::ChannelCreate { name } => {
-                        self.handle_channel_create(name)
-                    }
-                    Message::ChannelDelete { name } => {
-                        self.handle_channel_delete(name)
-                    }
-                    _ => {
-                        Err(format!("Received an invalid message: {:?}", msg)).into()
-                    }
+                    Message::ChannelGetAll => self.handle_channel_get_all(),
+                    Message::ChannelGet { name } => self.handle_channel_get(name),
+                    Message::ChannelCreate { name } => self.handle_channel_create(name),
+                    Message::ChannelDelete { name } => self.handle_channel_delete(name),
+                    _ => Err(format!("Received an invalid message: {:?}", msg)).into(),
                 };
 
                 if let Some(result) = result {
@@ -113,26 +107,34 @@ impl ChannelStore {
         self.channels.remove_connection_from_all(conn.addr)
     }
 
-    fn handle_broadcast(&mut self, channel: &String, body: Value, conn: Connection) -> CommandResult {
+    fn handle_broadcast(
+        &mut self,
+        channel: &String,
+        body: Value,
+        conn: Connection,
+    ) -> CommandResult {
         let msg = Message::Broadcast {
             channel: channel.clone(),
             body,
         };
 
-        self.channels.broadcast(channel, msg.into(), Some(conn.addr))
+        self.channels
+            .broadcast(channel, msg.into(), Some(conn.addr))
     }
 
     // Channel API handlers
 
     fn handle_channel_get_all(&self) -> CommandResult {
         Ok(super::router::CommandResponse::ChannelGetAll(
-            self.channels.keys()
+            self.channels.keys(),
         ))
     }
 
     fn handle_channel_get(&self, name: String) -> CommandResult {
         if let Some(channel) = self.channels.get_channel(&name) {
-            Ok(super::router::CommandResponse::ChannelGet(Some(channel.name.clone())))
+            Ok(super::router::CommandResponse::ChannelGet(Some(
+                channel.name.clone(),
+            )))
         } else {
             Ok(super::router::CommandResponse::ChannelGet(None))
         }

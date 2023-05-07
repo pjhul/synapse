@@ -1,0 +1,26 @@
+{
+  "name": "synapse",
+  "version": "0.1.0",
+  "description": "A websocket-based pub/sub server written in Rust",
+  "main": "index.js",
+  "directories": {
+    "test": "tests"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "prepare": "husky install"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/pjhul/synapse.git"
+  },
+  "author": "Paul Hultgren",
+  "license": "Apache-2.0",
+  "bugs": {
+    "url": "https://github.com/pjhul/synapse/issues"
+  },
+  "homepage": "https://github.com/pjhul/synapse#readme",
+  "devDependencies": {
+    "husky": "^8.0.0"
+  }
+}

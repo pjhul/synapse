@@ -11,3 +11,11 @@ target/
 
 # Persisted data when running locally
 db/
+
+# Logs
+logs
+*.log
+npm-debug.log*
+
+# Dependency directories
+node_modules/

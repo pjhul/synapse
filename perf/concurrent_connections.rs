@@ -1,15 +1,21 @@
 use futures_channel::oneshot;
-use futures_util::{StreamExt, SinkExt};
+use futures_util::{SinkExt, StreamExt};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::time::Duration;
 use tokio::runtime::Runtime;
 use tokio::sync::mpsc;
 use tokio_tungstenite::tungstenite::Message;
-use tokio_tungstenite::{connect_async, tungstenite::protocol::WebSocketConfig, connect_async_with_config};
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::time::Duration;
+use tokio_tungstenite::{
+    connect_async, connect_async_with_config, tungstenite::protocol::WebSocketConfig,
+};
 
 use std::sync::{Arc, Mutex};
 
-async fn run_concurrent_connections_test(url: &str, max_connections: usize, step: usize) -> Result<(), Box<dyn std::error::Error>> {
+async fn run_concurrent_connections_test(
+    url: &str,
+    max_connections: usize,
+    step: usize,
+) -> Result<(), Box<dyn std::error::Error>> {
     let done_flag = Arc::new(Mutex::new(false));
     let connection_failed_flag = Arc::new(AtomicBool::new(false));
 
@@ -68,7 +74,11 @@ async fn run_concurrent_connections_test(url: &str, max_connections: usize, step
     Ok(())
 }
 
-async fn run_message_throughput_test(url: &str, total_connections: usize, messages_per_sec: usize) -> Result<(), Box<dyn std::error::Error>> {
+async fn run_message_throughput_test(
+    url: &str,
+    total_connections: usize,
+    messages_per_sec: usize,
+) -> Result<(), Box<dyn std::error::Error>> {
     let done_flag = Arc::new(Mutex::new(false));
     let connection_failed_flag = Arc::new(AtomicBool::new(false));
 
@@ -91,7 +101,11 @@ async fn run_message_throughput_test(url: &str, total_connections: usize, messag
                 Ok((mut ws_stream, _)) => {
                     let (mut write, read) = ws_stream.split();
 
-                    write.send(Message::Text("{ \"type\": \"join\", \"channel\": \"throughput\" }".to_string())).await;
+                    write
+                        .send(Message::Text(
+                            "{ \"type\": \"join\", \"channel\": \"throughput\" }".to_string(),
+                        ))
+                        .await;
 
                     while !*done_flag_clone.lock().unwrap() {
                         // Optional: Sleep for a short duration to reduce CPU usage
@@ -124,7 +138,6 @@ async fn run_message_throughput_test(url: &str, total_connections: usize, messag
     Ok(())
 }
 
-
 fn main() {
     let url = "ws://main_program:8080/ws";
     let max_connections = 100000;
@@ -136,5 +149,6 @@ fn main() {
     // Run the concurrent connections test
     // rt.block_on(run_concurrent_connections_test(url, max_connections, step)).unwrap();
 
-    rt.block_on(run_message_throughput_test(url, 100, 100)).unwrap();
+    rt.block_on(run_message_throughput_test(url, 100, 100))
+        .unwrap();
 }

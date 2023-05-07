@@ -1,7 +1,7 @@
 use std::env;
 
-use synapse::server::Server;
 use synapse::metrics::get_metrics;
+use synapse::server::Server;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {

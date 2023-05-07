@@ -6,7 +6,7 @@ use log::info;
 use crate::connection::Connection;
 use crate::message::Message;
 
-use super::{router::{CommandResult}, Channel, storage::ChannelStorage};
+use super::{router::CommandResult, storage::ChannelStorage, Channel};
 
 #[derive(Debug)]
 pub struct ChannelMap {
@@ -49,6 +49,10 @@ impl ChannelMap {
         self.channels.get(name)
     }
 
+    pub fn has_channel(&self, channel_name: String) -> bool {
+        self.channels.contains_key(&channel_name)
+    }
+
     pub fn add_channel(&mut self, name: &String) -> Result<(), String> {
         // We update the DB first here as that can fail but the write to the hashmap cannot, and so
         // no rollback is needed. I think we'll still need more robust logic here to keep these two
@@ -85,11 +89,7 @@ impl ChannelMap {
         Ok(())
     }
 
-    pub fn add_connection(
-        &mut self,
-        channel_name: &String,
-        conn: Connection,
-    ) -> CommandResult {
+    pub fn add_connection(&mut self, channel_name: &String, conn: Connection) -> CommandResult {
         if let Some(channel) = self.channels.get_mut(channel_name) {
             let connections = &mut channel.connections;
 
@@ -107,11 +107,7 @@ impl ChannelMap {
         }
     }
 
-    pub fn remove_connection(
-        &mut self,
-        channel_name: &String,
-        addr: SocketAddr,
-    ) -> CommandResult {
+    pub fn remove_connection(&mut self, channel_name: &String, addr: SocketAddr) -> CommandResult {
         let channel = self.channels.get_mut(channel_name);
 
         if let Some(channel) = channel {
@@ -182,10 +178,6 @@ impl ChannelMap {
         info!("Removed connection for {}", addr);
 
         return Ok(super::router::CommandResponse::Ok);
-    }
-
-    pub fn has_channel(&self, channel_name: String) -> bool {
-        self.channels.contains_key(&channel_name)
     }
 
     pub fn broadcast(

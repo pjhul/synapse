@@ -1,4 +1,4 @@
-use rocksdb::{Options, DB, ColumnFamilyDescriptor};
+use rocksdb::{ColumnFamilyDescriptor, Options, DB};
 
 #[derive(Debug)]
 pub struct ChannelStorage {
@@ -16,9 +16,7 @@ impl ChannelStorage {
         let db = DB::open_cf_descriptors(&options, path, vec![cf_descriptor])
             .expect("Failed to open RocksDB");
 
-        ChannelStorage {
-            db,
-        }
+        ChannelStorage { db }
     }
 
     pub fn create_channel(&self, name: &str) -> Result<(), rocksdb::Error> {

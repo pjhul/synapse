@@ -1,10 +1,7 @@
 use std::net::SocketAddr;
 
 use axum::{
-    extract::{
-        ws::WebSocket,
-        ConnectInfo, WebSocketUpgrade,
-    },
+    extract::{ws::WebSocket, ConnectInfo, WebSocketUpgrade},
     response::IntoResponse,
     routing::get,
     Router,
@@ -13,10 +10,13 @@ use axum::{
 use log::info;
 use tokio::sync::mpsc;
 
-use crate::{channel::router::{Command, ChannelRouter}, connection::Connection};
+use crate::api::channels::channel_routes;
 use crate::message::Message;
 use crate::metrics::Metrics;
-use crate::api::channels::channel_routes;
+use crate::{
+    channel::router::{ChannelRouter, Command},
+    connection::Connection,
+};
 
 pub struct Server {}
 
@@ -59,7 +59,7 @@ impl Server {
     async fn ws_handler(
         ws: WebSocketUpgrade,
         ConnectInfo(addr): ConnectInfo<SocketAddr>,
-        channels: ChannelRouter
+        channels: ChannelRouter,
     ) -> impl IntoResponse {
         info!("New connection from: {}", addr);
         let channels = channels.clone();
@@ -67,7 +67,9 @@ impl Server {
         ws.on_upgrade(move |socket| async move {
             tokio::spawn(async move {
                 let addr = addr.to_owned();
-                Self::handle_connection(socket, addr, channels).await.unwrap();
+                Self::handle_connection(socket, addr, channels)
+                    .await
+                    .unwrap();
             });
         })
     }
@@ -75,13 +77,16 @@ impl Server {
     async fn handle_connection(
         stream: WebSocket,
         addr: SocketAddr,
-        channels: ChannelRouter
+        channels: ChannelRouter,
     ) -> Result<(), Box<dyn std::error::Error>> {
         let mut conn = Connection::new(None, addr);
 
         conn.listen(stream, &channels).await?;
 
-        channels.send_command(Message::Disconnect, Some(conn)).await.unwrap();
+        channels
+            .send_command(Message::Disconnect, Some(conn))
+            .await
+            .unwrap();
 
         Ok(())
     }

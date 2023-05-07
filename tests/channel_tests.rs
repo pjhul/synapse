@@ -1,8 +1,8 @@
 use std::net::SocketAddr;
 
+use axum::extract::ws::Message;
 use futures::{FutureExt, StreamExt};
 use tokio::sync::mpsc::{unbounded_channel, UnboundedSender};
-use axum::extract::ws::Message;
 
 use synapse::{channel::ChannelMap, connection::Connection};
 use tokio::sync::mpsc;
@@ -62,7 +62,6 @@ async fn test_remove_connection() {
     let mut channel_map = create_channel_map();
     let channel_name = String::from("test_channel");
     let conn = create_connection();
-
 
     channel_map.add_channel(&channel_name);
     channel_map.add_connection(&channel_name, conn.clone());

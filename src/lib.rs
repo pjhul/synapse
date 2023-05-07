@@ -1,6 +1,6 @@
-pub mod server;
-pub mod channel;
-pub mod message;
-pub mod connection;
-pub mod metrics;
 pub mod api;
+pub mod channel;
+pub mod connection;
+pub mod message;
+pub mod metrics;
+pub mod server;
