@@ -3,7 +3,7 @@ use log::warn;
 use serde_json::Value;
 use tokio::sync::mpsc::Receiver;
 
-use crate::auth::AuthPayload;
+use crate::auth::{AuthPayload, Operation};
 use crate::message::Message;
 use crate::{auth::make_auth_request, connection::Connection};
 
@@ -91,6 +91,7 @@ impl ChannelStore {
             let is_authorized = make_auth_request(
                 auth,
                 AuthPayload {
+                    operation: Operation::Join,
                     channel: channel.name.clone(),
                     conn_id: conn.id.clone(),
                 },
