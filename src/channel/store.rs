@@ -1,4 +1,3 @@
-use axum::extract::ws::Message as WebSocketMessage;
 use log::warn;
 use serde_json::Value;
 use tokio::sync::mpsc::Receiver;
@@ -114,14 +113,9 @@ impl ChannelStore {
         self.channels.remove_connection_from_all(conn.addr)
     }
 
-    fn handle_broadcast(
-        &mut self,
-        channel: &String,
-        body: Value,
-        conn: Connection,
-    ) -> CommandResult {
+    fn handle_broadcast(&mut self, channel: &str, body: Value, conn: Connection) -> CommandResult {
         let msg = Message::Broadcast {
-            channel: channel.clone(),
+            channel: channel.to_owned(),
             body,
         };
 

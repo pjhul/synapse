@@ -118,9 +118,6 @@ impl<S: Storage> ChannelMap<S> {
             return Err(format!("Channel {} does not exist", channel_name));
         }
 
-        // FIXME: Don't `get` the channel twice, use the same one from above
-        let channel = self.channels.get(channel_name);
-
         Ok(super::router::CommandResponse::Ok)
     }
 
@@ -254,7 +251,10 @@ mod tests {
         channel_map.add_channel(&channel_name, None).unwrap();
 
         // FIXME: Hack to disable presence
-        channel_map.get_mut(&channel_name).unwrap().disable_presence();
+        channel_map
+            .get_mut(&channel_name)
+            .unwrap()
+            .disable_presence();
 
         channel_map
             .add_connection(&channel_name, conn.clone())
@@ -276,7 +276,10 @@ mod tests {
         channel_map.add_channel(&channel_name, None).unwrap();
 
         // FIXME: Hack to disable presence
-        channel_map.get_mut(&channel_name).unwrap().disable_presence();
+        channel_map
+            .get_mut(&channel_name)
+            .unwrap()
+            .disable_presence();
 
         channel_map
             .add_connection(&channel_name, conn.clone())
@@ -302,7 +305,10 @@ mod tests {
         channel_map.add_channel(&channel_name, None).unwrap();
 
         // FIXME: Hack to disable presence
-        channel_map.get_mut(&channel_name).unwrap().disable_presence();
+        channel_map
+            .get_mut(&channel_name)
+            .unwrap()
+            .disable_presence();
 
         channel_map
             .add_connection(&channel_name, conn.clone())
@@ -354,11 +360,13 @@ mod tests {
         channel_map.add_channel(&channel_name, None).unwrap();
 
         // FIXME: Hack to disable presence
-        channel_map.get_mut(&channel_name).unwrap().disable_presence();
+        channel_map
+            .get_mut(&channel_name)
+            .unwrap()
+            .disable_presence();
 
         channel_map.add_connection(&channel_name, conn1).unwrap();
         channel_map.add_connection(&channel_name, conn2).unwrap();
-
 
         let msg_text = "Hello, world!";
         let message = WebSocketMessage::Text(msg_text.to_owned());
