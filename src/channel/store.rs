@@ -3,7 +3,7 @@ use log::warn;
 use serde_json::Value;
 use tokio::sync::mpsc::Receiver;
 
-use crate::auth::{AuthPayload, Operation};
+use crate::auth::{AuthConfig, AuthPayload, Operation};
 use crate::message::Message;
 use crate::{auth::make_auth_request, connection::Connection};
 
@@ -64,7 +64,7 @@ impl ChannelStore {
                     }
                     Message::ChannelGetAll => self.handle_channel_get_all(),
                     Message::ChannelGet { name } => self.handle_channel_get(name),
-                    Message::ChannelCreate { name } => self.handle_channel_create(name),
+                    Message::ChannelCreate { name, auth } => self.handle_channel_create(name, auth),
                     Message::ChannelDelete { name } => self.handle_channel_delete(name),
                     _ => Err(format!("Received an invalid message: {:?}", msg)),
                 };
@@ -159,8 +159,8 @@ impl ChannelStore {
         }
     }
 
-    fn handle_channel_create(&mut self, name: String) -> CommandResult {
-        self.channels.add_channel(&name)?;
+    fn handle_channel_create(&mut self, name: String, auth: Option<AuthConfig>) -> CommandResult {
+        self.channels.add_channel(&name, auth)?;
 
         Ok(CommandResponse::ChannelCreate(name))
     }

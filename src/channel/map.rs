@@ -47,10 +47,10 @@ impl<S: Storage> ChannelMap<S> {
         self.channels.contains_key(&channel_name)
     }
 
-    pub fn add_channel(&mut self, name: &String) -> Result<(), String> {
+    pub fn add_channel(&mut self, name: &String, auth: Option<AuthConfig>) -> Result<(), String> {
         let channel = Channel {
             name: name.clone(),
-            auth: None,
+            auth,
             connections: HashMap::new(),
         };
 
@@ -72,6 +72,7 @@ impl<S: Storage> ChannelMap<S> {
     }
 
     pub fn remove_channel(&mut self, name: &String) -> Result<(), String> {
+        // TODO: Remove all connections from the channel first
         self.db.remove_channel(name)?;
 
         let channels = &mut self.channels;
@@ -241,7 +242,7 @@ mod tests {
         let mut channel_map = create_channel_map();
         let channel_name = String::from("test_channel");
 
-        channel_map.add_channel(&channel_name).unwrap();
+        channel_map.add_channel(&channel_name, None).unwrap();
 
         assert!(channel_map.has_channel(channel_name));
     }
@@ -252,7 +253,7 @@ mod tests {
         let channel_name = String::from("test_channel");
         let conn = create_connection();
 
-        channel_map.add_channel(&channel_name).unwrap();
+        channel_map.add_channel(&channel_name, None).unwrap();
         channel_map
             .add_connection(&channel_name, conn.clone())
             .unwrap();
@@ -270,7 +271,7 @@ mod tests {
         let channel_name = String::from("test_channel");
         let conn = create_connection();
 
-        channel_map.add_channel(&channel_name).unwrap();
+        channel_map.add_channel(&channel_name, None).unwrap();
         channel_map
             .add_connection(&channel_name, conn.clone())
             .unwrap();
@@ -292,7 +293,7 @@ mod tests {
         let channel_name = String::from("test_channel");
         let conn = create_connection();
 
-        channel_map.add_channel(&channel_name).unwrap();
+        channel_map.add_channel(&channel_name, None).unwrap();
         channel_map
             .add_connection(&channel_name, conn.clone())
             .unwrap();
@@ -313,7 +314,7 @@ mod tests {
 
         assert!(!channel_map.has_channel(channel_name.clone()));
 
-        channel_map.add_channel(&channel_name).unwrap();
+        channel_map.add_channel(&channel_name, None).unwrap();
 
         assert!(channel_map.has_channel(channel_name));
     }
@@ -340,7 +341,7 @@ mod tests {
 
         let skip_addr = conn1.addr;
 
-        channel_map.add_channel(&channel_name).unwrap();
+        channel_map.add_channel(&channel_name, None).unwrap();
         channel_map.add_connection(&channel_name, conn1).unwrap();
         channel_map.add_connection(&channel_name, conn2).unwrap();
 

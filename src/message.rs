@@ -4,6 +4,8 @@ use serde::{Deserialize, Serialize};
 
 use axum::extract::ws::Message as WebSocketMessage;
 
+use crate::auth::AuthConfig;
+
 #[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Message {
@@ -35,6 +37,7 @@ pub enum Message {
     },
     ChannelCreate {
         name: String,
+        auth: Option<AuthConfig>,
     },
     ChannelDelete {
         name: String,

@@ -1,4 +1,5 @@
 use hyper::StatusCode;
+use log::info;
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -26,6 +27,8 @@ pub async fn make_auth_request(config: &AuthConfig, payload: AuthPayload) -> Res
         .send()
         .await
         .map_err(|e| e.to_string())?;
+
+    info!("Received auth status {}", res.status());
 
     let is_success = res.status() == StatusCode::OK; // 200
 

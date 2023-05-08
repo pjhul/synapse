@@ -7,32 +7,51 @@ use axum::{
     Router,
 };
 use hyper::StatusCode;
+use serde::Deserialize;
 
 use crate::{
+    auth::AuthConfig,
     channel::router::{ChannelRouter, CommandResponse},
     message::Message,
 };
+
+#[derive(Deserialize)]
+struct CreateChannelBody {
+    name: String,
+    auth: Option<AuthConfig>,
+}
 
 async fn create_channel(
     Extension(channel_router): Extension<ChannelRouter>,
     req: Request<Body>,
 ) -> impl IntoResponse {
-    // FIXME: This should be a JSON body with a name field and not raw text
     let body = hyper::body::to_bytes(req.into_body()).await.unwrap();
-    let name = String::from_utf8(body.to_vec()).unwrap();
 
-    let res = channel_router
-        .send_command(Message::ChannelCreate { name }, None)
-        .await;
+    match serde_json::from_slice::<CreateChannelBody>(&body) {
+        Ok(body) => {
+            let res = channel_router
+                .send_command(
+                    Message::ChannelCreate {
+                        name: body.name,
+                        auth: body.auth,
+                    },
+                    None,
+                )
+                .await;
 
-    match res {
-        Ok(CommandResponse::ChannelCreate(name)) => (StatusCode::CREATED, name).into_response(),
-        Ok(_) => (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "Internal Server Error".to_string(),
-        )
-            .into_response(),
-        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e).into_response(),
+            match res {
+                Ok(CommandResponse::ChannelCreate(name)) => {
+                    (StatusCode::CREATED, name).into_response()
+                }
+                Ok(_) => (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "Internal Server Error".to_string(),
+                )
+                    .into_response(),
+                Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e).into_response(),
+            }
+        }
+        Err(e) => (StatusCode::BAD_REQUEST, e.to_string()).into_response(),
     }
 }
 
