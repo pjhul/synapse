@@ -27,21 +27,7 @@ impl<S: Storage> ChannelMap<S> {
             panic!("Error loading channels from DB: {}", e);
         });
 
-        let channel_map = channels
-            .into_iter()
-            .map(|c| {
-                (
-                    c.clone(),
-                    Channel {
-                        name: c,
-                        auth: Some(AuthConfig {
-                            url: String::from("http://localhost/"),
-                        }),
-                        connections: HashMap::new(),
-                    },
-                )
-            })
-            .collect();
+        let channel_map = channels.into_iter().map(|c| (c.name.clone(), c)).collect();
 
         Self {
             channels: channel_map,
@@ -62,10 +48,16 @@ impl<S: Storage> ChannelMap<S> {
     }
 
     pub fn add_channel(&mut self, name: &String) -> Result<(), String> {
+        let channel = Channel {
+            name: name.clone(),
+            auth: None,
+            connections: HashMap::new(),
+        };
+
         // We update the DB first here as that can fail but the write to the hashmap cannot, and so
         // no rollback is needed. I think we'll still need more robust logic here to keep these two
         // in-sync
-        self.db.create_channel(name)?;
+        self.db.create_channel(&channel)?;
 
         let channels = &mut self.channels;
 
@@ -73,14 +65,7 @@ impl<S: Storage> ChannelMap<S> {
             // TODO: Unclear if we should fail here or not, but I'm leaning towards not failing
             // return Err(format!("Channel {} already exists", name));
         } else {
-            channels.insert(
-                name.clone(),
-                Channel {
-                    name: name.clone(),
-                    auth: None,
-                    connections: HashMap::new(),
-                },
-            );
+            channels.insert(name.clone(), channel);
         }
 
         Ok(())

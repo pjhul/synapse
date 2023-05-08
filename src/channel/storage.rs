@@ -1,5 +1,7 @@
 use rocksdb::{ColumnFamilyDescriptor, Options, DB};
 
+use super::Channel;
+
 #[derive(Debug)]
 pub struct ChannelStorage {
     // TODO: We only ever have a single instance of our ChannelMap so we don't need a mutex here,
@@ -9,9 +11,9 @@ pub struct ChannelStorage {
 
 pub trait Storage {
     fn new(path: &str) -> Self;
-    fn create_channel(&self, name: &str) -> Result<(), rocksdb::Error>;
+    fn create_channel(&self, channel: &Channel) -> Result<(), rocksdb::Error>;
     fn remove_channel(&self, name: &str) -> Result<(), rocksdb::Error>;
-    fn get_channels(&self) -> Result<Vec<String>, rocksdb::Error>;
+    fn get_channels(&self) -> Result<Vec<Channel>, rocksdb::Error>;
 }
 
 // Maybe it even makes sense to have some code here that switches between different storage
@@ -34,11 +36,13 @@ impl Storage for ChannelStorage {
         ChannelStorage { db }
     }
 
-    fn create_channel(&self, name: &str) -> Result<(), rocksdb::Error> {
-        let channel_exists = self.db.get(name.as_bytes())?;
+    fn create_channel(&self, channel: &Channel) -> Result<(), rocksdb::Error> {
+        let channel_exists = self.db.get(channel.name.as_bytes())?;
+
         if channel_exists.is_none() {
-            self.db.put(name.as_bytes(), b"")?;
+            self.db.put(channel.name.as_bytes(), channel)?;
         }
+
         Ok(())
     }
 
@@ -47,15 +51,15 @@ impl Storage for ChannelStorage {
         Ok(())
     }
 
-    fn get_channels(&self) -> Result<Vec<String>, rocksdb::Error> {
+    fn get_channels(&self) -> Result<Vec<Channel>, rocksdb::Error> {
         let cf = self.db.cf_handle("default").unwrap();
         let mut channels = Vec::new();
         let iter = self.db.full_iterator_cf(cf, rocksdb::IteratorMode::Start);
 
         for key_result in iter {
-            let (key, _) = key_result?;
-            let channel_name = String::from_utf8_lossy(&key).to_string();
-            channels.push(channel_name);
+            let (_, channel_bytes) = key_result?;
+
+            channels.push(Channel::from(channel_bytes));
         }
 
         Ok(channels)
@@ -73,7 +77,7 @@ pub mod tests {
             MockChannelStorage {}
         }
 
-        fn create_channel(&self, _name: &str) -> Result<(), rocksdb::Error> {
+        fn create_channel(&self, _name: &Channel) -> Result<(), rocksdb::Error> {
             Ok(())
         }
 
@@ -81,7 +85,7 @@ pub mod tests {
             Ok(())
         }
 
-        fn get_channels(&self) -> Result<Vec<std::string::String>, rocksdb::Error> {
+        fn get_channels(&self) -> Result<Vec<Channel>, rocksdb::Error> {
             Ok(vec![])
         }
     }
@@ -89,17 +93,24 @@ pub mod tests {
     #[test]
     fn test_create_channel() {
         let storage = ChannelStorage::new("/tmp/test_create_channel");
-        storage.create_channel("test").unwrap();
+        let channel = Channel::new(String::from("test"), None);
+
+        storage.create_channel(&channel).unwrap();
         let channels = storage.get_channels().unwrap();
+
         assert_eq!(channels.len(), 1);
-        assert_eq!(channels[0], "test");
+        assert_eq!(channels[0].name, "test");
+        assert!(channels[0].auth.is_none());
     }
 
     #[test]
     fn test_remove_channel() {
         let storage = ChannelStorage::new("/tmp/test_remove_channel");
-        storage.create_channel("test").unwrap();
+        let channel = Channel::new(String::from("test"), None);
+
+        storage.create_channel(&channel).unwrap();
         storage.remove_channel("test").unwrap();
+
         let channels = storage.get_channels().unwrap();
         assert_eq!(channels.len(), 0);
     }

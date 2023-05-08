@@ -1,8 +1,7 @@
 use hyper::StatusCode;
-use log::info;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct AuthConfig {
     pub url: String,
 }
@@ -27,8 +26,6 @@ pub async fn make_auth_request(config: &AuthConfig, payload: AuthPayload) -> Res
         .send()
         .await
         .map_err(|e| e.to_string())?;
-
-    info!("Auth response: {:?}", res);
 
     let is_success = res.status() == StatusCode::OK; // 200
 
