@@ -14,3 +14,13 @@ pub struct Channel {
     pub auth: Option<AuthConfig>,
     pub connections: HashMap<SocketAddr, Connection>,
 }
+
+impl Channel {
+    pub fn new(name: String, auth: Option<AuthConfig>) -> Self {
+        Self {
+            name,
+            auth,
+            connections: HashMap::new(),
+        }
+    }
+}

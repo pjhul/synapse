@@ -3,9 +3,11 @@ use log::warn;
 use serde_json::Value;
 use tokio::sync::mpsc::Receiver;
 
-use crate::connection::Connection;
+use crate::auth::AuthPayload;
 use crate::message::Message;
+use crate::{auth::make_auth_request, connection::Connection};
 
+use super::router::CommandResponse;
 use super::{
     map::ChannelMap,
     router::{Command, CommandResult},
@@ -42,7 +44,7 @@ impl ChannelStore {
                         presence: _,
                     } => {
                         let conn = conn.unwrap();
-                        self.handle_join(channel, conn.clone())
+                        self.handle_join(channel, conn.clone()).await
                     }
                     Message::Leave { ref channel } => {
                         let conn = conn.unwrap();
@@ -76,13 +78,31 @@ impl ChannelStore {
 
     // Message handlers
 
-    fn handle_join(&mut self, channel: &String, conn: Connection) -> CommandResult {
-        // TODO: Remove this, eventually all channels will have to be created first
-        self.channels.add_channel(channel)?;
+    async fn handle_join(&mut self, channel_name: &String, conn: Connection) -> CommandResult {
+        let channel = self.channels.get_channel(channel_name);
 
-        self.channels.add_connection(channel, conn)?;
+        if channel.is_none() {
+            return Err(format!("Channel {} does not exist", channel_name));
+        }
 
-        let channel = self.channels.get_channel(channel).unwrap().clone();
+        let channel = channel.unwrap().clone();
+
+        if let Some(ref auth) = channel.auth {
+            let is_authorized = make_auth_request(
+                auth,
+                AuthPayload {
+                    channel: channel.name.clone(),
+                    conn_id: conn.id.clone(),
+                },
+            )
+            .await?;
+
+            if !is_authorized {
+                return Ok(CommandResponse::Unauthorized("Unauthorized".to_string()));
+            }
+        }
+
+        self.channels.add_connection(channel_name, conn)?;
 
         self.channels.broadcast(
             &channel.name,
@@ -127,30 +147,26 @@ impl ChannelStore {
     // Channel API handlers
 
     fn handle_channel_get_all(&self) -> CommandResult {
-        Ok(super::router::CommandResponse::ChannelGetAll(
-            self.channels.keys(),
-        ))
+        Ok(CommandResponse::ChannelGetAll(self.channels.keys()))
     }
 
     fn handle_channel_get(&self, name: String) -> CommandResult {
         if let Some(channel) = self.channels.get_channel(&name) {
-            Ok(super::router::CommandResponse::ChannelGet(Some(
-                channel.name.clone(),
-            )))
+            Ok(CommandResponse::ChannelGet(Some(channel.name.clone())))
         } else {
-            Ok(super::router::CommandResponse::ChannelGet(None))
+            Ok(CommandResponse::ChannelGet(None))
         }
     }
 
     fn handle_channel_create(&mut self, name: String) -> CommandResult {
         self.channels.add_channel(&name)?;
 
-        Ok(super::router::CommandResponse::ChannelCreate(name))
+        Ok(CommandResponse::ChannelCreate(name))
     }
 
     fn handle_channel_delete(&mut self, name: String) -> CommandResult {
         self.channels.remove_channel(&name)?;
 
-        Ok(super::router::CommandResponse::ChannelDelete(name))
+        Ok(CommandResponse::ChannelDelete(name))
     }
 }

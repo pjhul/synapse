@@ -10,7 +10,7 @@ use tokio::sync::mpsc::{error::SendError, UnboundedSender};
 
 use tokio_stream::wrappers::UnboundedReceiverStream;
 
-use crate::channel::router::ChannelRouter;
+use crate::channel::router::{ChannelRouter, CommandResponse};
 use crate::message::Message;
 use crate::metrics::Metrics;
 
@@ -92,6 +92,14 @@ impl Connection {
                         self_clone
                             .send(Message::Error { message: e }.into())
                             .unwrap();
+                    } else {
+                        let result = result.unwrap();
+
+                        if let CommandResponse::Unauthorized(msg) = result {
+                            self_clone
+                                .send(Message::Error { message: msg }.into())
+                                .unwrap();
+                        }
                     }
                 } else {
                     warn!("Received a non-text message");

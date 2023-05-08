@@ -18,6 +18,7 @@ pub type CommandResult = Result<CommandResponse, String>;
 #[derive(Debug)]
 pub enum CommandResponse {
     Ok,
+    Unauthorized(String),
     ChannelGetAll(Vec<String>),
     ChannelCreate(String),
     ChannelGet(Option<String>),

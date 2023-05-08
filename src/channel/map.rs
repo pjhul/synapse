@@ -3,8 +3,8 @@ use std::{collections::HashMap, net::SocketAddr};
 use axum::extract::ws::Message as WebSocketMessage;
 use log::info;
 
-use crate::connection::Connection;
 use crate::message::Message;
+use crate::{auth::AuthConfig, connection::Connection};
 
 use super::{router::CommandResult, storage::Storage, Channel};
 
@@ -34,7 +34,9 @@ impl<S: Storage> ChannelMap<S> {
                     c.clone(),
                     Channel {
                         name: c,
-                        auth: None,
+                        auth: Some(AuthConfig {
+                            url: String::from("http://localhost/"),
+                        }),
                         connections: HashMap::new(),
                     },
                 )
