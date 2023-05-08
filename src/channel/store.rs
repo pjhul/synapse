@@ -79,7 +79,7 @@ impl ChannelStore {
     // Message handlers
 
     async fn handle_join(&mut self, channel_name: &String, conn: Connection) -> CommandResult {
-        let channel = self.channels.get_channel(channel_name);
+        let channel = self.channels.get(channel_name);
 
         if channel.is_none() {
             return Err(format!("Channel {} does not exist", channel_name));
@@ -103,23 +103,7 @@ impl ChannelStore {
             }
         }
 
-        self.channels.add_connection(channel_name, conn)?;
-
-        self.channels.broadcast(
-            &channel.name,
-            WebSocketMessage::Text(
-                Message::Presence {
-                    channel: channel.name.clone(),
-                    connections: channel
-                        .connections
-                        .values()
-                        .map(|c| c.addr.to_string())
-                        .collect(),
-                }
-                .into(),
-            ),
-            None,
-        )
+        self.channels.add_connection(channel_name, conn)
     }
 
     fn handle_leave(&mut self, channel: &String, conn: Connection) -> CommandResult {
@@ -152,7 +136,7 @@ impl ChannelStore {
     }
 
     fn handle_channel_get(&self, name: String) -> CommandResult {
-        if let Some(channel) = self.channels.get_channel(&name) {
+        if let Some(channel) = self.channels.get(&name) {
             Ok(CommandResponse::ChannelGet(Some(channel.name.clone())))
         } else {
             Ok(CommandResponse::ChannelGet(None))

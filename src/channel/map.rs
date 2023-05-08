@@ -39,8 +39,12 @@ impl<S: Storage> ChannelMap<S> {
         self.channels.keys().cloned().collect()
     }
 
-    pub fn get_channel(&self, name: &String) -> Option<&Channel> {
+    pub fn get(&self, name: &String) -> Option<&Channel> {
         self.channels.get(name)
+    }
+
+    pub fn get_mut(&mut self, name: &String) -> Option<&mut Channel> {
+        self.channels.get_mut(name)
     }
 
     pub fn has_channel(&self, channel_name: String) -> bool {
@@ -48,11 +52,7 @@ impl<S: Storage> ChannelMap<S> {
     }
 
     pub fn add_channel(&mut self, name: &String, auth: Option<AuthConfig>) -> Result<(), String> {
-        let channel = Channel {
-            name: name.clone(),
-            auth,
-            connections: HashMap::new(),
-        };
+        let channel = Channel::new(name.clone(), auth);
 
         // We update the DB first here as that can fail but the write to the hashmap cannot, and so
         // no rollback is needed. I think we'll still need more robust logic here to keep these two
@@ -72,7 +72,7 @@ impl<S: Storage> ChannelMap<S> {
     }
 
     pub fn remove_channel(&mut self, name: &String) -> Result<(), String> {
-        // TODO: Remove all connections from the channel first
+        // TODO: Alert all the connections that the connection to the channel has closed
         self.db.remove_channel(name)?;
 
         let channels = &mut self.channels;
@@ -96,6 +96,8 @@ impl<S: Storage> ChannelMap<S> {
             info!("Added connection for {}", conn.addr);
             connections.insert(conn.addr, conn);
 
+            self.broadcast_presence(channel_name)?;
+
             Ok(super::router::CommandResponse::Ok)
         } else {
             Err(format!("Channel {} does not exist", channel_name))
@@ -118,19 +120,6 @@ impl<S: Storage> ChannelMap<S> {
 
         // FIXME: Don't `get` the channel twice, use the same one from above
         let channel = self.channels.get(channel_name);
-
-        let msg = Message::Presence {
-            channel: channel_name.clone(),
-            connections: channel
-                .unwrap()
-                .connections
-                .values()
-                .map(|c| c.addr.to_string())
-                .filter(|a| *a != addr.to_string())
-                .collect(),
-        };
-
-        self.broadcast(channel_name, msg.into(), addr.into())?;
 
         Ok(super::router::CommandResponse::Ok)
     }
@@ -157,17 +146,7 @@ impl<S: Storage> ChannelMap<S> {
             // TODO: Don't `get` the channels twice if possible
             let channel = self.channels.get(&name).unwrap().clone();
 
-            let msg = Message::Presence {
-                channel: name.clone(),
-                connections: channel
-                    .connections
-                    .values()
-                    .map(|c| c.addr.to_string())
-                    .filter(|a| *a != addr.to_string())
-                    .collect(),
-            };
-
-            self.broadcast(&channel.name, msg.into(), addr.into())?;
+            self.broadcast_presence(&channel.name)?;
         }
 
         info!("Removed connection for {}", addr);
@@ -177,7 +156,7 @@ impl<S: Storage> ChannelMap<S> {
 
     pub fn broadcast(
         &mut self,
-        channel_name: &String,
+        channel_name: &str,
         message: WebSocketMessage,
         skip_addr: Option<SocketAddr>,
     ) -> CommandResult {
@@ -200,6 +179,25 @@ impl<S: Storage> ChannelMap<S> {
         } else {
             Err(format!("Channel {} does not exist", channel_name))
         }
+    }
+
+    pub fn broadcast_presence(&mut self, channel_name: &str) -> CommandResult {
+        let channel = self.channels.get(channel_name).unwrap();
+
+        if !channel.presence {
+            return Ok(super::router::CommandResponse::Ok);
+        }
+
+        let connections = channel.connections.values();
+
+        println!("Connections: {:?}", connections);
+
+        let msg = Message::Presence {
+            channel: String::from(channel_name),
+            connections: connections.map(|c| c.id.clone()).collect(),
+        };
+
+        self.broadcast(channel_name, msg.into(), None)
     }
 }
 
@@ -254,6 +252,10 @@ mod tests {
         let conn = create_connection();
 
         channel_map.add_channel(&channel_name, None).unwrap();
+
+        // FIXME: Hack to disable presence
+        channel_map.get_mut(&channel_name).unwrap().disable_presence();
+
         channel_map
             .add_connection(&channel_name, conn.clone())
             .unwrap();
@@ -272,6 +274,10 @@ mod tests {
         let conn = create_connection();
 
         channel_map.add_channel(&channel_name, None).unwrap();
+
+        // FIXME: Hack to disable presence
+        channel_map.get_mut(&channel_name).unwrap().disable_presence();
+
         channel_map
             .add_connection(&channel_name, conn.clone())
             .unwrap();
@@ -294,6 +300,10 @@ mod tests {
         let conn = create_connection();
 
         channel_map.add_channel(&channel_name, None).unwrap();
+
+        // FIXME: Hack to disable presence
+        channel_map.get_mut(&channel_name).unwrap().disable_presence();
+
         channel_map
             .add_connection(&channel_name, conn.clone())
             .unwrap();
@@ -342,8 +352,13 @@ mod tests {
         let skip_addr = conn1.addr;
 
         channel_map.add_channel(&channel_name, None).unwrap();
+
+        // FIXME: Hack to disable presence
+        channel_map.get_mut(&channel_name).unwrap().disable_presence();
+
         channel_map.add_connection(&channel_name, conn1).unwrap();
         channel_map.add_connection(&channel_name, conn2).unwrap();
+
 
         let msg_text = "Hello, world!";
         let message = WebSocketMessage::Text(msg_text.to_owned());

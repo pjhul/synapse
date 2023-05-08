@@ -92,6 +92,7 @@ pub mod tests {
 
     #[test]
     fn test_create_channel() {
+        // TODO: This should get cleaned up after the test
         let storage = ChannelStorage::new("/tmp/test_create_channel");
         let channel = Channel::new(String::from("test"), None);
 

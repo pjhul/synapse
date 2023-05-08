@@ -14,6 +14,7 @@ mod store;
 pub struct Channel {
     pub name: String,
     pub auth: Option<AuthConfig>,
+    pub presence: bool,
     #[serde(skip)]
     pub connections: HashMap<SocketAddr, Connection>,
 }
@@ -22,9 +23,15 @@ impl Channel {
     pub fn new(name: String, auth: Option<AuthConfig>) -> Self {
         Self {
             name,
+            presence: true,
             auth,
             connections: HashMap::new(),
         }
+    }
+
+    // FIXME: This is a hack to get tests to pass, eventually allow the client to set this directly
+    pub fn disable_presence(&mut self) {
+        self.presence = false;
     }
 }
 
