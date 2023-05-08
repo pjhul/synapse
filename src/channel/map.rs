@@ -34,6 +34,7 @@ impl<S: Storage> ChannelMap<S> {
                     c.clone(),
                     Channel {
                         name: c,
+                        auth: None,
                         connections: HashMap::new(),
                     },
                 )
@@ -74,6 +75,7 @@ impl<S: Storage> ChannelMap<S> {
                 name.clone(),
                 Channel {
                     name: name.clone(),
+                    auth: None,
                     connections: HashMap::new(),
                 },
             );
