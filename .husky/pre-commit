@@ -2,4 +2,4 @@
 . "$(dirname -- "$0")/_/husky.sh"
 
 # TODO: only format staged files and add them to the commit
-cargo fmt && cargo clippy --bin "synapse" && cargo test
+cargo fmt && cargo clippy --bin "synapse" && cargo test --bin "synapse"
