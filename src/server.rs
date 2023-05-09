@@ -7,12 +7,14 @@ use axum::{
     Router,
 };
 
+use hyper::StatusCode;
 use log::info;
+use prometheus::{Encoder, TextEncoder};
 use tokio::sync::mpsc;
 
-use crate::api::channels::channel_routes;
 use crate::message::Message;
 use crate::metrics::Metrics;
+use crate::{api::channels::channel_routes, metrics::get_metrics};
 use crate::{
     channel::router::{ChannelRouter, Command},
     connection::Connection,
@@ -43,6 +45,7 @@ impl Server {
         );
 
         let app = Router::new()
+            .route("/metrics", get(Self::metrics_handler))
             .nest("/api", channel_router)
             .nest("/", ws_router);
 
@@ -88,6 +91,15 @@ impl Server {
             .unwrap();
 
         Ok(())
+    }
+
+    async fn metrics_handler() -> impl IntoResponse {
+        let mut buffer = vec![];
+        let encoder = TextEncoder::new();
+        let metrics = get_metrics().unwrap();
+        encoder.encode(&metrics, &mut buffer).unwrap();
+
+        (StatusCode::OK, buffer)
     }
 }
 

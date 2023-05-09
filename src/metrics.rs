@@ -1,52 +1,51 @@
 use lazy_static::lazy_static;
+use prometheus::{Counter, Gauge, IntCounter, IntGauge, Registry};
 use std::collections::HashMap;
+use std::sync::atomic::AtomicU64;
 use std::sync::Mutex;
 
 pub trait Metrics {
-    fn increment(&self, key: &str, value: u64) {
-        let mut metrics = METRICS_HUB.metrics.lock().unwrap();
-        let counter = metrics.entry(key.to_string()).or_insert(0);
-        *counter += value;
+    fn increment_active_connections(&self) {
+        METRICS_HUB.active_connections.inc();
     }
 
-    fn decrement(&self, key: &str, value: u64) {
-        let mut metrics = METRICS_HUB.metrics.lock().unwrap();
-        let counter = metrics.entry(key.to_string()).or_insert(0);
-        *counter -= value;
+    fn decrement_active_connections(&self) {
+        METRICS_HUB.active_connections.dec();
+    }
+
+    fn increment_messages_received(&self) {
+        METRICS_HUB.messages_received.inc();
     }
 }
 
 pub struct MetricsHub {
-    // FIXME: This is very inefficient for the type of mostly increment/decrement only access
-    // pattern we have here. Perhaps some sort of event based system that aggregates over time
-    // would be better.
-    metrics: Mutex<HashMap<String, u64>>,
+    active_connections: IntGauge,
+    messages_received: IntCounter,
 }
 
 impl MetricsHub {
     pub fn new() -> Self {
         MetricsHub {
-            metrics: Mutex::new(HashMap::new()),
+            active_connections: IntGauge::new("active_connections", "Active websocket connections")
+                .unwrap(),
+            messages_received: IntCounter::new("messages_received", "Messages received").unwrap(),
         }
     }
 
-    pub fn get_metrics(&self) -> HashMap<String, u64> {
-        let metrics = self.metrics.lock().unwrap();
-        metrics.clone()
-    }
-
-    pub fn get(&self, key: &str) -> u64 {
-        let metrics = self.metrics.lock().unwrap();
-        let counter = metrics.get(key);
-        match counter {
-            Some(value) => *value,
-            None => 0,
-        }
+    pub fn get_metrics(&self) -> Result<Vec<prometheus::proto::MetricFamily>, ()> {
+        let registry = Registry::new();
+        registry
+            .register(Box::new(self.active_connections.clone()))
+            .unwrap();
+        registry
+            .register(Box::new(self.messages_received.clone()))
+            .unwrap();
+        Ok(registry.gather())
     }
 
     pub fn reset(&self) {
-        let mut metrics = self.metrics.lock().unwrap();
-        metrics.clear();
+        self.active_connections.set(0);
+        self.messages_received.reset();
     }
 }
 
@@ -60,6 +59,6 @@ lazy_static! {
     static ref METRICS_HUB: MetricsHub = MetricsHub::new();
 }
 
-pub fn get_metrics() -> HashMap<String, u64> {
+pub fn get_metrics() -> Result<Vec<prometheus::proto::MetricFamily>, ()> {
     METRICS_HUB.get_metrics()
 }

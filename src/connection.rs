@@ -51,7 +51,7 @@ impl Connection {
         let (sender, receiver) = unbounded_channel::<WebSocketMessage>();
         self.sender = Some(sender);
 
-        self.increment("Connection::connections", 1);
+        self.increment_active_connections();
 
         let (write, read) = ws.split();
 
@@ -60,7 +60,7 @@ impl Connection {
         let broadcast_incoming = read.try_for_each(|msg| {
             let self_clone = self_clone.clone();
 
-            self_clone.increment("Connection::messages", 1);
+            self.increment_messages_received();
 
             async move {
                 if let Ok(msg) = msg.to_text() {
@@ -119,7 +119,7 @@ impl Connection {
 
         self.sender.take();
 
-        self.decrement("Connection::connections", 1);
+        self.decrement_active_connections();
 
         Ok(())
     }
