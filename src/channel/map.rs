@@ -110,10 +110,6 @@ impl<S: Storage> ChannelMap<S> {
         if let Some(channel) = channel {
             channel.connections.remove(&addr);
             info!("Removed connection for {}", addr);
-
-            // if connections.len() == 0 {
-            //     self.channels.remove(&channel.name);
-            // }
         } else {
             return Err(format!("Channel {} does not exist", channel_name));
         }
