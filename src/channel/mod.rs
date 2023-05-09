@@ -38,6 +38,7 @@ impl Channel {
 impl AsRef<[u8]> for Channel {
     fn as_ref(&self) -> &[u8] {
         let data = bincode::serialize(self).expect("Failed to serialize channel");
+        // FIXME: Remove this leak
         Box::leak(data.into_boxed_slice())
     }
 }

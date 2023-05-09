@@ -21,6 +21,9 @@ pub trait Metrics {
 pub struct MetricsHub {
     active_connections: IntGauge,
     messages_received: IntCounter,
+    // TODO: Add total number of channels
+    // TODO: Add a way of tracking the number of messages per channel
+    // TODO: Add a way of tracking the number of connections per channel
 }
 
 impl MetricsHub {

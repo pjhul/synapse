@@ -6,6 +6,7 @@ services:
     container_name: synapse
     ports:
       - "8080:8080"
+    restart: on-failure
 
   prometheus:
     image: prom/prometheus:latest

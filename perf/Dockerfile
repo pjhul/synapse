@@ -4,7 +4,6 @@ WORKDIR /app
 
 COPY . .
 
-RUN cargo build --release --bin perf_concurrent_connections
+RUN cargo build --release
 
-CMD ["./target/release/perf_concurrent_connections"]
-
+CMD ["./target/release/synapse-perf-tests"]
