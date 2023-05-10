@@ -65,7 +65,11 @@ impl ChannelStore {
                     }
                     Message::ChannelGetAll => self.handle_channel_get_all(),
                     Message::ChannelGet { name } => self.handle_channel_get(name),
-                    Message::ChannelCreate { name, auth, presence } => self.handle_channel_create(name, auth, presence),
+                    Message::ChannelCreate {
+                        name,
+                        auth,
+                        presence,
+                    } => self.handle_channel_create(name, auth, presence),
                     Message::ChannelDelete { name } => self.handle_channel_delete(name),
                     _ => Err(format!("Received an invalid message: {:?}", msg)),
                 };
@@ -79,7 +83,12 @@ impl ChannelStore {
 
     // Message handlers
 
-    async fn handle_join(&mut self, channel_name: &String, conn: Connection, send_presence: bool) -> CommandResult {
+    async fn handle_join(
+        &mut self,
+        channel_name: &String,
+        conn: Connection,
+        send_presence: bool,
+    ) -> CommandResult {
         let channel = self.channels.get(channel_name);
 
         if channel.is_none() {
@@ -104,7 +113,9 @@ impl ChannelStore {
             }
         }
 
-        self.channels.add_connection(channel_name, conn, send_presence).await
+        self.channels
+            .add_connection(channel_name, conn, send_presence)
+            .await
     }
 
     async fn handle_leave(&mut self, channel: &String, conn: Connection) -> CommandResult {
@@ -145,7 +156,12 @@ impl ChannelStore {
         }
     }
 
-    fn handle_channel_create(&mut self, name: String, auth: Option<AuthConfig>, presence: bool) -> CommandResult {
+    fn handle_channel_create(
+        &mut self,
+        name: String,
+        auth: Option<AuthConfig>,
+        presence: bool,
+    ) -> CommandResult {
         self.channels.add_channel(&name, auth, presence)?;
 
         Ok(CommandResponse::ChannelCreate(name))

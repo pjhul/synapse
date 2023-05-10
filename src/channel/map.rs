@@ -52,7 +52,12 @@ impl<S: Storage> ChannelMap<S> {
         self.channels.contains_key(&channel_name)
     }
 
-    pub fn add_channel(&mut self, name: &String, auth: Option<AuthConfig>, presence: bool) -> Result<(), String> {
+    pub fn add_channel(
+        &mut self,
+        name: &String,
+        auth: Option<AuthConfig>,
+        presence: bool,
+    ) -> Result<(), String> {
         let channel = Channel::new(name.clone(), auth, presence);
 
         // We update the DB first here as that can fail but the write to the hashmap cannot, and so
@@ -112,7 +117,11 @@ impl<S: Storage> ChannelMap<S> {
         }
     }
 
-    pub async fn remove_connection(&mut self, channel_name: &String, addr: SocketAddr) -> CommandResult {
+    pub async fn remove_connection(
+        &mut self,
+        channel_name: &String,
+        addr: SocketAddr,
+    ) -> CommandResult {
         let channel = self.channels.get_mut(channel_name);
 
         if let Some(channel) = channel {
@@ -142,7 +151,6 @@ impl<S: Storage> ChannelMap<S> {
                 if channel.presence {
                     presence_updates.push(name.clone());
                 }
-
 
                 if channel.connections.is_empty() {
                     // self.channels.remove(&channel.name);
@@ -180,7 +188,10 @@ impl<S: Storage> ChannelMap<S> {
                 .map(|(_, sender)| sender.send(message.clone()))
                 .collect::<Vec<_>>();
 
-            info!("Broadcasting message to {} connections", broadcast_tasks.len());
+            info!(
+                "Broadcasting message to {} connections",
+                broadcast_tasks.len()
+            );
 
             let results = futures::future::join_all(broadcast_tasks).await;
 

@@ -1,17 +1,15 @@
 use std::{net::SocketAddr, result::Result};
 
-use axum::Error;
 use axum::extract::ws::{Message as WebSocketMessage, WebSocket};
+use axum::Error;
 
 use futures_util::future::select;
 use futures_util::stream::SplitSink;
-use futures_util::{pin_mut, StreamExt, TryStreamExt, SinkExt};
+use futures_util::{pin_mut, SinkExt, StreamExt, TryStreamExt};
 use log::{error, info, warn};
 use tokio::sync::mpsc::Receiver;
 use tokio::sync::mpsc::{channel, error::SendError, Sender};
-use tokio_tungstenite::{
-    tungstenite::Error as TungsteniteError,
-};
+use tokio_tungstenite::tungstenite::Error as TungsteniteError;
 
 use tokio_stream::wrappers::ReceiverStream;
 
@@ -123,7 +121,8 @@ impl Connection {
 
             pin_mut!(broadcast_incoming, forward_outgoing);
             select(broadcast_incoming, forward_outgoing).await;
-        }.await;
+        }
+        .await;
 
         self.sender.take();
 
@@ -134,7 +133,11 @@ impl Connection {
         Ok(())
     }
 
-    async fn forward_messages(&self, receiver: Receiver<WebSocketMessage>, mut writer: SplitSink<WebSocket, WebSocketMessage>) {
+    async fn forward_messages(
+        &self,
+        receiver: Receiver<WebSocketMessage>,
+        mut writer: SplitSink<WebSocket, WebSocketMessage>,
+    ) {
         let receiver = ReceiverStream::new(receiver);
 
         let mut receiver = receiver.chunks(16);
