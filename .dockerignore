@@ -1,0 +1,7 @@
+debug/
+target/
+db/
+logs
+*.log
+npm-debug.log*
+node_modules/
