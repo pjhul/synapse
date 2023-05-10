@@ -94,7 +94,7 @@ pub mod tests {
     fn test_create_channel() {
         // TODO: This should get cleaned up after the test
         let storage = ChannelStorage::new("/tmp/test_create_channel");
-        let channel = Channel::new(String::from("test"), None);
+        let channel = Channel::new(String::from("test"), None, false);
 
         storage.create_channel(&channel).unwrap();
         let channels = storage.get_channels().unwrap();
@@ -107,7 +107,7 @@ pub mod tests {
     #[test]
     fn test_remove_channel() {
         let storage = ChannelStorage::new("/tmp/test_remove_channel");
-        let channel = Channel::new(String::from("test"), None);
+        let channel = Channel::new(String::from("test"), None, false);
 
         storage.create_channel(&channel).unwrap();
         storage.remove_channel("test").unwrap();

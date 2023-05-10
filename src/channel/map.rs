@@ -264,7 +264,7 @@ mod tests {
         let mut channel_map = create_channel_map();
         let channel_name = String::from("test_channel");
 
-        channel_map.add_channel(&channel_name, None).unwrap();
+        channel_map.add_channel(&channel_name, None, false).unwrap();
 
         assert!(channel_map.has_channel(channel_name));
     }
@@ -275,7 +275,7 @@ mod tests {
         let channel_name = String::from("test_channel");
         let conn = create_connection();
 
-        channel_map.add_channel(&channel_name, None).unwrap();
+        channel_map.add_channel(&channel_name, None, false).unwrap();
 
         // FIXME: Hack to disable presence
         channel_map
@@ -284,7 +284,7 @@ mod tests {
             .disable_presence();
 
         channel_map
-            .add_connection(&channel_name, conn.clone())
+            .add_connection(&channel_name, conn.clone(), false)
             .await
             .unwrap();
 
@@ -301,7 +301,7 @@ mod tests {
         let channel_name = String::from("test_channel");
         let conn = create_connection();
 
-        channel_map.add_channel(&channel_name, None).unwrap();
+        channel_map.add_channel(&channel_name, None, false).unwrap();
 
         // FIXME: Hack to disable presence
         channel_map
@@ -310,12 +310,13 @@ mod tests {
             .disable_presence();
 
         channel_map
-            .add_connection(&channel_name, conn.clone())
+            .add_connection(&channel_name, conn.clone(), false)
             .await
             .unwrap();
 
         channel_map
             .remove_connection(&channel_name, conn.addr)
+            .await
             .unwrap();
 
         let channels = channel_map.channels;
@@ -331,7 +332,7 @@ mod tests {
         let channel_name = String::from("test_channel");
         let conn = create_connection();
 
-        channel_map.add_channel(&channel_name, None).unwrap();
+        channel_map.add_channel(&channel_name, None, false).unwrap();
 
         // FIXME: Hack to disable presence
         channel_map
@@ -340,7 +341,7 @@ mod tests {
             .disable_presence();
 
         channel_map
-            .add_connection(&channel_name, conn.clone())
+            .add_connection(&channel_name, conn.clone(), false)
             .await
             .unwrap();
 
@@ -363,7 +364,7 @@ mod tests {
 
         assert!(!channel_map.has_channel(channel_name.clone()));
 
-        channel_map.add_channel(&channel_name, None).unwrap();
+        channel_map.add_channel(&channel_name, None, false).unwrap();
 
         assert!(channel_map.has_channel(channel_name));
     }
@@ -390,7 +391,7 @@ mod tests {
 
         let skip_addr = conn1.addr;
 
-        channel_map.add_channel(&channel_name, None).unwrap();
+        channel_map.add_channel(&channel_name, None, false).unwrap();
 
         // FIXME: Hack to disable presence
         channel_map
@@ -399,11 +400,11 @@ mod tests {
             .disable_presence();
 
         channel_map
-            .add_connection(&channel_name, conn1)
+            .add_connection(&channel_name, conn1, false)
             .await
             .unwrap();
         channel_map
-            .add_connection(&channel_name, conn2)
+            .add_connection(&channel_name, conn2, false)
             .await
             .unwrap();
 

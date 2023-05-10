@@ -239,22 +239,6 @@ impl<C> WebSocketUpgrade<C> {
     /// will be called.
     ///
     /// By default any errors will be silently ignored.
-    ///
-    /// # Example
-    ///
-    /// ```
-    /// use axum::response::Response;
-    /// use axum_tungstenite::WebSocketUpgrade;
-    ///
-    /// async fn handler(ws: WebSocketUpgrade) -> Response {
-    ///     ws.on_failed_upgrade(|error| {
-    ///         report_error(error);
-    ///     })
-    ///     .on_upgrade(|socket| async { /* ... */ })
-    /// }
-    /// #
-    /// # fn report_error(_: hyper::Error) {}
-    /// ```
     pub fn on_failed_upgrade<C2>(self, callback: C2) -> WebSocketUpgrade<C2>
     where
         C2: OnFailedUpgrade,

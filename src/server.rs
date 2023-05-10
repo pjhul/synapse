@@ -26,7 +26,7 @@ impl Server {
     pub async fn run(self, addr: &str) {
         info!("Listening on: {}", addr);
 
-        let (tx, rx) = mpsc::channel::<Command>(1024);
+        let (tx, rx) = mpsc::channel::<Command>(256);
         let channels = ChannelRouter::new(tx, rx);
 
         let channel_router = channel_routes(channels.clone());
