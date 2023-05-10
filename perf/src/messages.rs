@@ -45,7 +45,7 @@ pub async fn run_message_throughput_test(
 
                     while !*done_flag_clone.lock().unwrap() {
                         // Optional: Sleep for a short duration to reduce CPU usage
-                        tokio::time::sleep(Duration::from_millis(100)).await;
+                        tokio::time::sleep(Duration::from_millis(600)).await;
 
                         write.send(Message::Text("{ \"type\": \"broadcast\", \"channel\": \"throughput\", \"body\": \"test\" }".to_string())).await.unwrap();
 

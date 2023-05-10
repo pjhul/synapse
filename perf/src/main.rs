@@ -17,4 +17,17 @@ fn main() {
 
     rt.block_on(run_message_throughput_test(url, max_connections, 100))
         .unwrap();
+    
+    // TODO: Create a testing framework for describing and running scenarios in code
+    //
+    // Very rough sketch of what this might look like
+    // let scenario = Scenario::new()
+    //    .with_name("Concurrent Connections Test")
+    //    .with_description("Test the server's ability to handle concurrent connections")
+    //    .connections(100)
+    //    .subscribe_to("test_channel", 100%)
+    //    .publish_to("test_channel", 100%) // Percentage of connections that should be publishing
+    //    .wait_for(10s)
+    //    .run();
+    //
 }
