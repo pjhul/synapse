@@ -1,6 +1,5 @@
 use std::env;
 
-// use synapse::metrics::get_metrics;
 use synapse::server::Server;
 
 #[tokio::main]
@@ -8,24 +7,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let env = env_logger::Env::default().filter_or(env_logger::DEFAULT_FILTER_ENV, "info");
     env_logger::init_from_env(env);
 
+    // let subscriber = tracing_subscriber::fmt()
+    //     .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
+    //     .finish();
+
+    // tracing::subscriber::set_global_default(subscriber)?;
+
+    // console_subscriber::init();
+
     let addr = env::args()
         .nth(1)
         .unwrap_or_else(|| "0.0.0.0:8080".to_string());
-
-    /*tokio::spawn(async move {
-        loop {
-            tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
-            let metrics = get_metrics();
-
-            if let Some(num_connections) = metrics.get("Connection::connections") {
-                println!("Num connections: {}", num_connections);
-            }
-
-            if let Some(num_messages) = metrics.get("Connection::messages") {
-                println!("Num messages: {}", num_messages);
-            }
-        }
-    });*/
 
     let server = Server::new();
     server.run(&addr).await;
