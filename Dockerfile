@@ -1,7 +1,7 @@
 FROM rust:1.67 as builder
 WORKDIR /usr/src/synapse
-COPY . .
 RUN apt-get update && apt-get install -y clang
+COPY . .
 RUN cargo install --path . --bin synapse
 
 FROM debian:bullseye-slim
