@@ -16,11 +16,16 @@ pub trait Metrics {
     fn increment_messages_received(&self) {
         METRICS_HUB.messages_received.inc();
     }
+
+    fn increment_messages_sent(&self) {
+        METRICS_HUB.messages_sent.inc();
+    }
 }
 
 pub struct MetricsHub {
     active_connections: IntGauge,
     messages_received: IntCounter,
+    messages_sent: IntCounter,
     // TODO: Add total number of channels
     // TODO: Add a way of tracking the number of messages per channel
     // TODO: Add a way of tracking the number of connections per channel
@@ -32,17 +37,25 @@ impl MetricsHub {
             active_connections: IntGauge::new("active_connections", "Active websocket connections")
                 .unwrap(),
             messages_received: IntCounter::new("messages_received", "Messages received").unwrap(),
+            messages_sent: IntCounter::new("messages_sent", "Messages sent").unwrap(),
         }
     }
 
     pub fn get_metrics(&self) -> Result<Vec<prometheus::proto::MetricFamily>, ()> {
         let registry = Registry::new();
+
         registry
             .register(Box::new(self.active_connections.clone()))
             .unwrap();
+
         registry
             .register(Box::new(self.messages_received.clone()))
             .unwrap();
+
+        registry
+            .register(Box::new(self.messages_sent.clone()))
+            .unwrap();
+
         Ok(registry.gather())
     }
 

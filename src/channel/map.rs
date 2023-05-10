@@ -4,6 +4,7 @@ use axum::extract::ws::Message as WebSocketMessage;
 use log::info;
 
 use crate::message::Message;
+use crate::metrics::Metrics;
 use crate::{auth::AuthConfig, connection::Connection};
 
 use super::{router::CommandResult, storage::Storage, Channel};
@@ -167,6 +168,8 @@ impl<S: Storage> ChannelMap<S> {
                     }
                 }
 
+                self.increment_messages_sent();
+
                 if let Err(e) = sender.send(message.clone()).await {
                     return Err(format!("Error sending message to {}: {}", addr, e));
                 }
@@ -187,8 +190,6 @@ impl<S: Storage> ChannelMap<S> {
 
         let connections = channel.connections.values();
 
-        println!("Connections: {:?}", connections);
-
         let msg = Message::Presence {
             channel: String::from(channel_name),
             connections: connections.map(|c| c.id.clone()).collect(),
@@ -197,6 +198,8 @@ impl<S: Storage> ChannelMap<S> {
         self.broadcast(channel_name, msg.into(), None).await
     }
 }
+
+impl<T: Storage> Metrics for ChannelMap<T> {}
 
 // Tests are included only when running tests
 #[cfg(test)]
