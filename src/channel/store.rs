@@ -1,9 +1,10 @@
-use log::{info, warn};
+use log::warn;
 use serde_json::Value;
 use tokio::sync::mpsc::Receiver;
 
 use crate::auth::{AuthConfig, AuthPayload, Operation};
 use crate::message::Message;
+use crate::metrics::Metrics;
 use crate::{auth::make_auth_request, connection::Connection};
 
 use super::router::CommandResponse;
@@ -35,6 +36,8 @@ impl ChannelStore {
     pub fn run(mut self) {
         tokio::spawn(async move {
             while let Some(cmd) = self.receiver.recv().await {
+                ChannelStore::decrement_command_buffer_size();
+
                 let Command { msg, conn, result } = cmd;
 
                 let cmd_result: CommandResult = match msg.clone() {
@@ -173,3 +176,5 @@ impl ChannelStore {
         Ok(CommandResponse::ChannelDelete(name))
     }
 }
+
+impl Metrics for ChannelStore {}

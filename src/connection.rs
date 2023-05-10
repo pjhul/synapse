@@ -9,6 +9,7 @@ use futures_util::{pin_mut, SinkExt, StreamExt, TryStreamExt};
 use log::{error, info, warn};
 use tokio::sync::mpsc::Receiver;
 use tokio::sync::mpsc::{channel, error::SendError, Sender};
+use tokio::task::JoinHandle;
 use tokio_tungstenite::tungstenite::Error as TungsteniteError;
 
 use tokio_stream::wrappers::ReceiverStream;
@@ -51,21 +52,23 @@ impl Connection {
         ws: WebSocket,
         channels: &ChannelRouter,
     ) -> Result<(), Box<dyn std::error::Error>> {
-        let (sender, receiver) = channel::<WebSocketMessage>(512);
+        let (sender, receiver) = channel::<WebSocketMessage>(32);
         self.sender = Some(sender);
 
-        self.increment_active_connections();
+        Self::increment_active_connections();
 
-        let (write, read) = ws.split();
+        let (write, mut read) = ws.split();
 
         let self_clone = self.clone();
 
-        let broadcast_incoming = read.try_for_each(|msg| {
-            let self_clone = self_clone.clone();
+        let channels = channels.clone();
 
-            self.increment_messages_received();
+        let broadcast_incoming: JoinHandle<Result<(), String>> = tokio::spawn(async move {
+            while let Some(msg) = read.try_next().await.unwrap() {
+                let self_clone = self_clone.clone();
 
-            async move {
+                Self::increment_messages_received();
+
                 if let Ok(msg) = msg.to_text() {
                     let msg = match msg.parse::<Message>() {
                         Ok(msg) => msg,
@@ -82,7 +85,7 @@ impl Connection {
                                 .await
                                 .unwrap();
 
-                            return Ok(());
+                            continue;
                         }
                     };
 
@@ -110,43 +113,48 @@ impl Connection {
                 } else {
                     warn!("Received a non-text message");
                 }
-
-                Ok(())
             }
+
+            Ok(())
         });
 
         // FIXME: We should have a periodic check that the connection is still alive
-        async {
-            let forward_outgoing = self.forward_messages(receiver, write);
+        let forward_outgoing = self.forward_messages(receiver, write);
 
-            pin_mut!(broadcast_incoming, forward_outgoing);
-            select(broadcast_incoming, forward_outgoing).await;
-        }
-        .await;
+        tokio::select! {
+            _ = forward_outgoing => {},
+            _ = broadcast_incoming => {},
+        };
 
         self.sender.take();
 
-        self.decrement_active_connections();
+        Self::decrement_active_connections();
+
+        // self.decrement_active_connections();
 
         info!("Connection closed");
 
         Ok(())
     }
 
-    async fn forward_messages(
+    fn forward_messages(
         &self,
         receiver: Receiver<WebSocketMessage>,
         mut writer: SplitSink<WebSocket, WebSocketMessage>,
-    ) {
-        let receiver = ReceiverStream::new(receiver);
+    ) -> tokio::task::JoinHandle<()> {
+        let mut receiver = ReceiverStream::new(receiver);
 
-        let mut receiver = receiver.chunks(16);
+        // let mut receiver = receiver.chunks(8);
 
-        // TODO: Consider batching reads and writes here
-        while let Some(msgs) = receiver.next().await {
-            for msg in msgs {
-                self.increment_messages_sent(1);
+        tokio::spawn(async move {
+            while let Some(msg) = receiver.next().await {
+                // info!("Received {} messages", msgs.len());
+                // Self::increment_messages_sent(msgs.len() as u64);
 
+                Self::decrement_connection_buffer_size();
+                Self::increment_messages_sent(1);
+
+                // for msg in msgs {
                 let msg = msg.into();
                 let result = writer.send(msg).await;
 
@@ -172,13 +180,18 @@ impl Connection {
                         error!("Received non-websocket error");
                     }
                 }
-            }
 
-            writer.flush().await.unwrap();
-        }
+                writer.flush().await.unwrap();
+            }
+            // }
+
+            // writer.flush().await.unwrap();
+        })
     }
 
     pub async fn send(&self, msg: WebSocketMessage) -> Result<(), SendError<WebSocketMessage>> {
+        Self::increment_connection_buffer_size();
+
         if let Some(ref sender) = self.sender {
             sender.send(msg).await
         } else {

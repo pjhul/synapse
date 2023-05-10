@@ -1,5 +1,6 @@
 use std::env;
 
+use log::info;
 use synapse::server::Server;
 
 #[tokio::main]

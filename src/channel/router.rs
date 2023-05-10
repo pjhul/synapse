@@ -3,6 +3,7 @@ use tokio::sync::oneshot::Sender as OneshotSender;
 
 use crate::connection::Connection;
 use crate::message::Message;
+use crate::metrics::Metrics;
 
 use super::store::ChannelStore;
 
@@ -48,8 +49,12 @@ impl ChannelRouter {
             result: Some(result),
         };
 
+        ChannelRouter::increment_command_buffer_size();
+
         self.sender.send(cmd).await.unwrap();
 
         rx.await.unwrap()
     }
 }
+
+impl Metrics for ChannelRouter {}
