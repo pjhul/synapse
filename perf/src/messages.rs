@@ -35,7 +35,7 @@ pub async fn run_message_throughput_test(
         tokio::spawn(async move {
             match connect_async_with_config(&url, websocket_config).await {
                 Ok((mut ws_stream, _)) => {
-                    let (mut write, read) = ws_stream.split();
+                    let (mut write, mut read) = ws_stream.split();
 
                     write
                         .send(Message::Text(
@@ -48,6 +48,10 @@ pub async fn run_message_throughput_test(
                         tokio::time::sleep(Duration::from_millis(100)).await;
 
                         write.send(Message::Text("{ \"type\": \"broadcast\", \"channel\": \"throughput\", \"body\": \"test\" }".to_string())).await.unwrap();
+
+                        let message = read.next().await.unwrap().unwrap();
+
+                        println!("Received message: {}", message);
                     }
 
                     ws_stream = write.reunite(read).unwrap();

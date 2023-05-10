@@ -52,8 +52,8 @@ impl<S: Storage> ChannelMap<S> {
         self.channels.contains_key(&channel_name)
     }
 
-    pub fn add_channel(&mut self, name: &String, auth: Option<AuthConfig>) -> Result<(), String> {
-        let channel = Channel::new(name.clone(), auth);
+    pub fn add_channel(&mut self, name: &String, auth: Option<AuthConfig>, presence: bool) -> Result<(), String> {
+        let channel = Channel::new(name.clone(), auth, presence);
 
         // We update the DB first here as that can fail but the write to the hashmap cannot, and so
         // no rollback is needed. I think we'll still need more robust logic here to keep these two
@@ -89,6 +89,7 @@ impl<S: Storage> ChannelMap<S> {
         &mut self,
         channel_name: &String,
         conn: Connection,
+        send_presence: bool,
     ) -> CommandResult {
         if let Some(channel) = self.channels.get_mut(channel_name) {
             let connections = &mut channel.connections;
@@ -101,7 +102,9 @@ impl<S: Storage> ChannelMap<S> {
             info!("Added connection for {}", conn.addr);
             connections.insert(conn.addr, conn);
 
-            self.broadcast_presence(channel_name).await?;
+            if send_presence {
+                self.broadcast_presence(channel_name).await?;
+            }
 
             Ok(super::router::CommandResponse::Ok)
         } else {
@@ -109,12 +112,16 @@ impl<S: Storage> ChannelMap<S> {
         }
     }
 
-    pub fn remove_connection(&mut self, channel_name: &String, addr: SocketAddr) -> CommandResult {
+    pub async fn remove_connection(&mut self, channel_name: &String, addr: SocketAddr) -> CommandResult {
         let channel = self.channels.get_mut(channel_name);
 
         if let Some(channel) = channel {
             channel.connections.remove(&addr);
             info!("Removed connection for {}", addr);
+
+            if channel.presence {
+                self.broadcast_presence(channel_name).await?;
+            }
         } else {
             return Err(format!("Channel {} does not exist", channel_name));
         }
@@ -123,7 +130,7 @@ impl<S: Storage> ChannelMap<S> {
     }
 
     pub async fn remove_connection_from_all(&mut self, addr: SocketAddr) -> CommandResult {
-        let mut removed = Vec::new();
+        let mut presence_updates = Vec::new();
 
         // TODO: Rather than looping through all channels to remove the connection, have each
         // connection store the channels it is a part of. This also make the second part of
@@ -132,7 +139,10 @@ impl<S: Storage> ChannelMap<S> {
             if channel.connections.contains_key(&addr) {
                 channel.connections.remove(&addr);
 
-                removed.push(name.clone());
+                if channel.presence {
+                    presence_updates.push(name.clone());
+                }
+
 
                 if channel.connections.is_empty() {
                     // self.channels.remove(&channel.name);
@@ -140,11 +150,8 @@ impl<S: Storage> ChannelMap<S> {
             }
         }
 
-        for name in removed {
-            // TODO: Don't `get` the channels twice if possible
-            let channel = self.channels.get(&name).unwrap().clone();
-
-            self.broadcast_presence(&channel.name).await?;
+        for name in presence_updates {
+            self.broadcast_presence(&name).await?;
         }
 
         info!("Removed connection for {}", addr);
@@ -161,13 +168,19 @@ impl<S: Storage> ChannelMap<S> {
         if let Some(channel) = self.channels.get(channel_name) {
             let connections = &channel.connections;
 
-            let broadcast_tasks = connections.iter()
+            let broadcast_tasks = connections
+                .iter()
                 .filter(|(addr, _)| {
-                    skip_addr.is_some() && **addr == skip_addr.unwrap()
+                    if let Some(skip_addr) = skip_addr {
+                        **addr != skip_addr
+                    } else {
+                        true
+                    }
                 })
-                .map(|(_, sender)| {
-                    sender.send(message.clone())
-                });
+                .map(|(_, sender)| sender.send(message.clone()))
+                .collect::<Vec<_>>();
+
+            info!("Broadcasting message to {} connections", broadcast_tasks.len());
 
             let results = futures::future::join_all(broadcast_tasks).await;
 
@@ -320,7 +333,10 @@ mod tests {
             .await
             .unwrap();
 
-        channel_map.remove_connection_from_all(conn.addr).await.unwrap();
+        channel_map
+            .remove_connection_from_all(conn.addr)
+            .await
+            .unwrap();
 
         let channels = channel_map.channels;
         let channel = channels.get(&channel_name).unwrap();
@@ -371,8 +387,14 @@ mod tests {
             .unwrap()
             .disable_presence();
 
-        channel_map.add_connection(&channel_name, conn1).await.unwrap();
-        channel_map.add_connection(&channel_name, conn2).await.unwrap();
+        channel_map
+            .add_connection(&channel_name, conn1)
+            .await
+            .unwrap();
+        channel_map
+            .add_connection(&channel_name, conn2)
+            .await
+            .unwrap();
 
         let msg_text = "Hello, world!";
         let message = WebSocketMessage::Text(msg_text.to_owned());

@@ -38,6 +38,7 @@ pub enum Message {
     ChannelCreate {
         name: String,
         auth: Option<AuthConfig>,
+        presence: bool
     },
     ChannelDelete {
         name: String,

@@ -19,6 +19,7 @@ use crate::{
 struct CreateChannelBody {
     name: String,
     auth: Option<AuthConfig>,
+    presence: Option<bool>
 }
 
 async fn create_channel(
@@ -34,6 +35,7 @@ async fn create_channel(
                     Message::ChannelCreate {
                         name: body.name,
                         auth: body.auth,
+                        presence: body.presence.unwrap_or(false),
                     },
                     None,
                 )

@@ -20,10 +20,10 @@ pub struct Channel {
 }
 
 impl Channel {
-    pub fn new(name: String, auth: Option<AuthConfig>) -> Self {
+    pub fn new(name: String, auth: Option<AuthConfig>, presence: bool) -> Self {
         Self {
             name,
-            presence: true,
+            presence,
             auth,
             connections: HashMap::new(),
         }

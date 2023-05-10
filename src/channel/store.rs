@@ -1,4 +1,4 @@
-use log::{warn, info};
+use log::{info, warn};
 use serde_json::Value;
 use tokio::sync::mpsc::Receiver;
 
@@ -37,19 +37,17 @@ impl ChannelStore {
             while let Some(cmd) = self.receiver.recv().await {
                 let Command { msg, conn, result } = cmd;
 
-                info!("Received message: {:?}", msg);
-
                 let cmd_result: CommandResult = match msg.clone() {
                     Message::Join {
                         ref channel,
-                        presence: _,
+                        presence,
                     } => {
                         let conn = conn.unwrap();
-                        self.handle_join(channel, conn.clone()).await
+                        self.handle_join(channel, conn.clone(), presence).await
                     }
                     Message::Leave { ref channel } => {
                         let conn = conn.unwrap();
-                        self.handle_leave(channel, conn.clone())
+                        self.handle_leave(channel, conn.clone()).await
                     }
                     Message::Disconnect => {
                         let conn = conn.unwrap();
@@ -67,7 +65,7 @@ impl ChannelStore {
                     }
                     Message::ChannelGetAll => self.handle_channel_get_all(),
                     Message::ChannelGet { name } => self.handle_channel_get(name),
-                    Message::ChannelCreate { name, auth } => self.handle_channel_create(name, auth),
+                    Message::ChannelCreate { name, auth, presence } => self.handle_channel_create(name, auth, presence),
                     Message::ChannelDelete { name } => self.handle_channel_delete(name),
                     _ => Err(format!("Received an invalid message: {:?}", msg)),
                 };
@@ -81,7 +79,7 @@ impl ChannelStore {
 
     // Message handlers
 
-    async fn handle_join(&mut self, channel_name: &String, conn: Connection) -> CommandResult {
+    async fn handle_join(&mut self, channel_name: &String, conn: Connection, send_presence: bool) -> CommandResult {
         let channel = self.channels.get(channel_name);
 
         if channel.is_none() {
@@ -106,11 +104,11 @@ impl ChannelStore {
             }
         }
 
-        self.channels.add_connection(channel_name, conn).await
+        self.channels.add_connection(channel_name, conn, send_presence).await
     }
 
-    fn handle_leave(&mut self, channel: &String, conn: Connection) -> CommandResult {
-        self.channels.remove_connection(channel, conn.addr)
+    async fn handle_leave(&mut self, channel: &String, conn: Connection) -> CommandResult {
+        self.channels.remove_connection(channel, conn.addr).await
     }
 
     async fn handle_disconnect(&mut self, conn: Connection) -> CommandResult {
@@ -123,8 +121,6 @@ impl ChannelStore {
         body: Value,
         conn: Connection,
     ) -> CommandResult {
-        // return Ok(CommandResponse::Ok);
-
         let msg = Message::Broadcast {
             channel: channel.to_owned(),
             body,
@@ -149,8 +145,8 @@ impl ChannelStore {
         }
     }
 
-    fn handle_channel_create(&mut self, name: String, auth: Option<AuthConfig>) -> CommandResult {
-        self.channels.add_channel(&name, auth)?;
+    fn handle_channel_create(&mut self, name: String, auth: Option<AuthConfig>, presence: bool) -> CommandResult {
+        self.channels.add_channel(&name, auth, presence)?;
 
         Ok(CommandResponse::ChannelCreate(name))
     }

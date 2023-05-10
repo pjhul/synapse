@@ -1,11 +1,17 @@
 use std::{net::SocketAddr, result::Result};
 
+use axum::Error;
 use axum::extract::ws::{Message as WebSocketMessage, WebSocket};
 
 use futures_util::future::select;
-use futures_util::{pin_mut, StreamExt, TryStreamExt};
-use log::{error, warn, info};
+use futures_util::stream::SplitSink;
+use futures_util::{pin_mut, StreamExt, TryStreamExt, SinkExt};
+use log::{error, info, warn};
+use tokio::sync::mpsc::Receiver;
 use tokio::sync::mpsc::{channel, error::SendError, Sender};
+use tokio_tungstenite::{
+    tungstenite::Error as TungsteniteError,
+};
 
 use tokio_stream::wrappers::ReceiverStream;
 
@@ -112,20 +118,61 @@ impl Connection {
         });
 
         // FIXME: We should have a periodic check that the connection is still alive
+        async {
+            let forward_outgoing = self.forward_messages(receiver, write);
 
-        let receiver = ReceiverStream::new(receiver);
-
-        // FIXME: If the socket has been closed when we try and send, we should drop the connection here
-        let forward_outgoing = receiver.map(Ok).forward(write);
-
-        pin_mut!(broadcast_incoming, forward_outgoing);
-        select(broadcast_incoming, forward_outgoing).await;
+            pin_mut!(broadcast_incoming, forward_outgoing);
+            select(broadcast_incoming, forward_outgoing).await;
+        }.await;
 
         self.sender.take();
 
         self.decrement_active_connections();
 
+        info!("Connection closed");
+
         Ok(())
+    }
+
+    async fn forward_messages(&self, receiver: Receiver<WebSocketMessage>, mut writer: SplitSink<WebSocket, WebSocketMessage>) {
+        let receiver = ReceiverStream::new(receiver);
+
+        let mut receiver = receiver.chunks(16);
+
+        // TODO: Consider batching reads and writes here
+        while let Some(msgs) = receiver.next().await {
+            for msg in msgs {
+                self.increment_messages_sent(1);
+
+                let msg = msg.into();
+                let result = writer.send(msg).await;
+
+                if let Err(e) = result {
+                    let inner_error = e.into_inner();
+
+                    let err = inner_error.downcast::<TungsteniteError>();
+
+                    if let Ok(err) = err {
+                        match *err {
+                            TungsteniteError::ConnectionClosed => {
+                                warn!("Connection has already been closed");
+                                // TODO: Stop listening when the connection is closed
+                                return;
+                            }
+                            // FIXME: We shouldn't close the connection on every error
+                            _ => {
+                                error!("Error sending message: {}", err);
+                                return;
+                            }
+                        }
+                    } else {
+                        error!("Received non-websocket error");
+                    }
+                }
+            }
+
+            writer.flush().await.unwrap();
+        }
     }
 
     pub async fn send(&self, msg: WebSocketMessage) -> Result<(), SendError<WebSocketMessage>> {

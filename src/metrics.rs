@@ -14,8 +14,8 @@ pub trait Metrics {
         METRICS_HUB.messages_received.inc();
     }
 
-    fn increment_messages_sent(&self) {
-        METRICS_HUB.messages_sent.inc();
+    fn increment_messages_sent(&self, amt: u64) {
+        METRICS_HUB.messages_sent.inc_by(amt);
     }
 }
 
