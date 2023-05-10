@@ -1,11 +1,6 @@
 use std::net::SocketAddr;
 
-use axum::{
-    extract::{ws::WebSocket, ConnectInfo, WebSocketUpgrade},
-    response::IntoResponse,
-    routing::get,
-    Router,
-};
+use axum::{extract::ConnectInfo, response::IntoResponse, routing::get, Router};
 
 use hyper::StatusCode;
 use log::info;
@@ -14,6 +9,7 @@ use tokio::sync::mpsc;
 
 use crate::message::Message;
 use crate::metrics::Metrics;
+use crate::ws::upgrade::{WebSocket, WebSocketUpgrade};
 use crate::{api::channels::channel_routes, metrics::get_metrics};
 use crate::{
     channel::router::{ChannelRouter, Command},

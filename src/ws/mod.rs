@@ -8,18 +8,16 @@
 //! Each WebSocket stream implements the required `Stream` and `Sink` traits,
 //! so the socket is just a stream of messages coming in and going out.
 
-#![deny(missing_docs, unused_must_use, unused_mut, unused_imports, unused_import_braces)]
+#![deny(unused_must_use, unused_mut, unused_imports, unused_import_braces)]
 
 pub use tungstenite;
 
 mod compat;
-#[cfg(feature = "connect")]
-mod connect;
 mod handshake;
-#[cfg(feature = "stream")]
 mod stream;
 #[cfg(any(feature = "native-tls", feature = "__rustls-tls", feature = "connect"))]
 mod tls;
+pub mod upgrade;
 
 use std::io::{Read, Write};
 
@@ -35,18 +33,11 @@ use std::{
 };
 use tokio::io::{AsyncRead, AsyncWrite};
 
-#[cfg(feature = "handshake")]
-use tungstenite::{
-    client::IntoClientRequest,
-    handshake::{
-        client::{ClientHandshake, Response},
-        server::{Callback, NoCallback},
-        HandshakeError,
-    },
-};
 use tungstenite::{
     error::Error as WsError,
+    handshake::server::{Callback, NoCallback},
     protocol::{Message, Role, WebSocket, WebSocketConfig},
+    HandshakeError,
 };
 
 #[cfg(any(feature = "native-tls", feature = "__rustls-tls", feature = "connect"))]
@@ -54,63 +45,15 @@ pub use tls::Connector;
 #[cfg(any(feature = "native-tls", feature = "__rustls-tls"))]
 pub use tls::{client_async_tls, client_async_tls_with_config};
 
-#[cfg(feature = "connect")]
-pub use connect::{connect_async, connect_async_with_config};
-
-#[cfg(all(any(feature = "native-tls", feature = "__rustls-tls"), feature = "connect"))]
+#[cfg(all(
+    any(feature = "native-tls", feature = "__rustls-tls"),
+    feature = "connect"
+))]
 pub use connect::connect_async_tls_with_config;
 
-#[cfg(feature = "stream")]
 pub use stream::MaybeTlsStream;
 
 use tungstenite::protocol::CloseFrame;
-
-/// Creates a WebSocket handshake from a request and a stream.
-/// For convenience, the user may call this with a url string, a URL,
-/// or a `Request`. Calling with `Request` allows the user to add
-/// a WebSocket protocol or other custom headers.
-///
-/// Internally, this custom creates a handshake representation and returns
-/// a future representing the resolution of the WebSocket handshake. The
-/// returned future will resolve to either `WebSocketStream<S>` or `Error`
-/// depending on whether the handshake is successful.
-///
-/// This is typically used for clients who have already established, for
-/// example, a TCP connection to the remote server.
-#[cfg(feature = "handshake")]
-pub async fn client_async<'a, R, S>(
-    request: R,
-    stream: S,
-) -> Result<(WebSocketStream<S>, Response), WsError>
-where
-    R: IntoClientRequest + Unpin,
-    S: AsyncRead + AsyncWrite + Unpin,
-{
-    client_async_with_config(request, stream, None).await
-}
-
-/// The same as `client_async()` but the one can specify a websocket configuration.
-/// Please refer to `client_async()` for more details.
-#[cfg(feature = "handshake")]
-pub async fn client_async_with_config<'a, R, S>(
-    request: R,
-    stream: S,
-    config: Option<WebSocketConfig>,
-) -> Result<(WebSocketStream<S>, Response), WsError>
-where
-    R: IntoClientRequest + Unpin,
-    S: AsyncRead + AsyncWrite + Unpin,
-{
-    let f = handshake::client_handshake(stream, move |allow_std| {
-        let request = request.into_client_request()?;
-        let cli_handshake = ClientHandshake::start(allow_std, request, config)?;
-        cli_handshake.handshake()
-    });
-    f.await.map_err(|e| match e {
-        HandshakeError::Failure(e) => e,
-        e => WsError::Io(std::io::Error::new(std::io::ErrorKind::Other, e.to_string())),
-    })
-}
 
 /// Accepts a new WebSocket connection with the provided stream.
 ///
@@ -123,7 +66,6 @@ where
 /// This is typically used after a socket has been accepted from a
 /// `TcpListener`. That socket is then passed to this function to perform
 /// the server half of the accepting a client's websocket connection.
-#[cfg(feature = "handshake")]
 pub async fn accept_async<S>(stream: S) -> Result<WebSocketStream<S>, WsError>
 where
     S: AsyncRead + AsyncWrite + Unpin,
@@ -133,7 +75,6 @@ where
 
 /// The same as `accept_async()` but the one can specify a websocket configuration.
 /// Please refer to `accept_async()` for more details.
-#[cfg(feature = "handshake")]
 pub async fn accept_async_with_config<S>(
     stream: S,
     config: Option<WebSocketConfig>,
@@ -149,7 +90,6 @@ where
 /// This function does the same as `accept_async()` but accepts an extra callback
 /// for header processing. The callback receives headers of the incoming
 /// requests and is able to add extra headers to the reply.
-#[cfg(feature = "handshake")]
 pub async fn accept_hdr_async<S, C>(stream: S, callback: C) -> Result<WebSocketStream<S>, WsError>
 where
     S: AsyncRead + AsyncWrite + Unpin,
@@ -160,7 +100,6 @@ where
 
 /// The same as `accept_hdr_async()` but the one can specify a websocket configuration.
 /// Please refer to `accept_hdr_async()` for more details.
-#[cfg(feature = "handshake")]
 pub async fn accept_hdr_async_with_config<S, C>(
     stream: S,
     callback: C,
@@ -175,7 +114,10 @@ where
     });
     f.await.map_err(|e| match e {
         HandshakeError::Failure(e) => e,
-        e => WsError::Io(std::io::Error::new(std::io::ErrorKind::Other, e.to_string())),
+        e => WsError::Io(std::io::Error::new(
+            std::io::ErrorKind::Other,
+            e.to_string(),
+        )),
     })
 }
 
@@ -226,7 +168,11 @@ impl<S> WebSocketStream<S> {
     }
 
     pub(crate) fn new(ws: WebSocket<AllowStd<S>>) -> Self {
-        WebSocketStream { inner: ws, closing: false, ended: false }
+        WebSocketStream {
+            inner: ws,
+            closing: false,
+            ended: false,
+        }
     }
 
     fn with_context<F, R>(&mut self, ctx: Option<(ContextWaker, &mut Context<'_>)>, f: F) -> R
@@ -290,7 +236,11 @@ where
         }
 
         match futures_util::ready!(self.with_context(Some((ContextWaker::Read, cx)), |s| {
-            trace!("{}:{} Stream.with_context poll_next -> read_message()", file!(), line!());
+            trace!(
+                "{}:{} Stream.with_context poll_next -> read_message()",
+                file!(),
+                line!()
+            );
             cvt(s.read_message())
         })) {
             Ok(v) => Poll::Ready(Some(Ok(v))),
@@ -341,13 +291,15 @@ where
     }
 
     fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-        (*self).with_context(Some((ContextWaker::Write, cx)), |s| cvt(s.write_pending())).map(|r| {
-            // WebSocket connection has just been closed. Flushing completed, not an error.
-            match r {
-                Err(WsError::ConnectionClosed) => Ok(()),
-                other => other,
-            }
-        })
+        (*self)
+            .with_context(Some((ContextWaker::Write, cx)), |s| cvt(s.write_pending()))
+            .map(|r| {
+                // WebSocket connection has just been closed. Flushing completed, not an error.
+                match r {
+                    Err(WsError::ConnectionClosed) => Ok(()),
+                    other => other,
+                }
+            })
     }
 
     fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
@@ -374,34 +326,13 @@ where
     }
 }
 
-/// Get a domain from an URL.
-#[cfg(any(feature = "connect", feature = "native-tls", feature = "__rustls-tls"))]
-#[inline]
-fn domain(request: &tungstenite::handshake::client::Request) -> Result<String, WsError> {
-    match request.uri().host() {
-        // rustls expects IPv6 addresses without the surrounding [] brackets
-        #[cfg(feature = "__rustls-tls")]
-        Some(d) if d.starts_with('[') && d.ends_with(']') => Ok(d[1..d.len() - 1].to_string()),
-        Some(d) => Ok(d.to_string()),
-        None => Err(WsError::Url(tungstenite::error::UrlError::NoHostName)),
-    }
-}
-
 #[cfg(test)]
 mod tests {
-    #[cfg(feature = "connect")]
-    use crate::stream::MaybeTlsStream;
-    use crate::{compat::AllowStd, WebSocketStream};
+    use super::{compat::AllowStd, WebSocketStream};
     use std::io::{Read, Write};
-    #[cfg(feature = "connect")]
-    use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
     fn is_read<T: Read>() {}
     fn is_write<T: Write>() {}
-    #[cfg(feature = "connect")]
-    fn is_async_read<T: AsyncReadExt>() {}
-    #[cfg(feature = "connect")]
-    fn is_async_write<T: AsyncWriteExt>() {}
     fn is_unpin<T: Unpin>() {}
 
     #[test]
@@ -409,13 +340,6 @@ mod tests {
         is_read::<AllowStd<tokio::net::TcpStream>>();
         is_write::<AllowStd<tokio::net::TcpStream>>();
 
-        #[cfg(feature = "connect")]
-        is_async_read::<MaybeTlsStream<tokio::net::TcpStream>>();
-        #[cfg(feature = "connect")]
-        is_async_write::<MaybeTlsStream<tokio::net::TcpStream>>();
-
         is_unpin::<WebSocketStream<tokio::net::TcpStream>>();
-        #[cfg(feature = "connect")]
-        is_unpin::<WebSocketStream<MaybeTlsStream<tokio::net::TcpStream>>>();
     }
 }

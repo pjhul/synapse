@@ -1,6 +1,5 @@
-#[cfg(feature = "handshake")]
-use crate::compat::SetWaker;
-use crate::{compat::AllowStd, WebSocketStream};
+use super::compat::SetWaker;
+use super::{compat::AllowStd, WebSocketStream};
 use log::*;
 use std::{
     future::Future,
@@ -10,7 +9,6 @@ use std::{
 };
 use tokio::io::{AsyncRead, AsyncWrite};
 use tungstenite::WebSocket;
-#[cfg(feature = "handshake")]
 use tungstenite::{
     handshake::{
         client::Response, server::Callback, HandshakeError as Error, HandshakeRole,
@@ -46,7 +44,11 @@ where
     type Output = WebSocket<AllowStd<S>>;
 
     fn poll(self: Pin<&mut Self>, ctx: &mut Context<'_>) -> Poll<Self::Output> {
-        let inner = self.get_mut().0.take().expect("future polled after completion");
+        let inner = self
+            .get_mut()
+            .0
+            .take()
+            .expect("future polled after completion");
         trace!("Setting context when skipping handshake");
         let stream = AllowStd::new(inner.stream, ctx.waker());
 
@@ -54,24 +56,19 @@ where
     }
 }
 
-#[cfg(feature = "handshake")]
 struct MidHandshake<Role: HandshakeRole>(Option<WsHandshake<Role>>);
 
-#[cfg(feature = "handshake")]
 enum StartedHandshake<Role: HandshakeRole> {
     Done(Role::FinalResult),
     Mid(WsHandshake<Role>),
 }
 
-#[cfg(feature = "handshake")]
 struct StartedHandshakeFuture<F, S>(Option<StartedHandshakeFutureInner<F, S>>);
-#[cfg(feature = "handshake")]
 struct StartedHandshakeFutureInner<F, S> {
     f: F,
     stream: S,
 }
 
-#[cfg(feature = "handshake")]
 async fn handshake<Role, F, S>(stream: S, f: F) -> Result<Role::FinalResult, Error<Role>>
 where
     Role: HandshakeRole + Unpin,
@@ -90,7 +87,6 @@ where
     }
 }
 
-#[cfg(feature = "handshake")]
 pub(crate) async fn client_handshake<F, S>(
     stream: S,
     f: F,
@@ -109,7 +105,6 @@ where
     Ok((WebSocketStream::new(s), r))
 }
 
-#[cfg(feature = "handshake")]
 pub(crate) async fn server_handshake<C, F, S>(
     stream: S,
     f: F,
@@ -128,7 +123,6 @@ where
     Ok(WebSocketStream::new(s))
 }
 
-#[cfg(feature = "handshake")]
 impl<Role, F, S> Future for StartedHandshakeFuture<F, S>
 where
     Role: HandshakeRole,
@@ -152,7 +146,6 @@ where
     }
 }
 
-#[cfg(feature = "handshake")]
 impl<Role> Future for MidHandshake<Role>
 where
     Role: HandshakeRole + Unpin,
@@ -161,7 +154,11 @@ where
     type Output = Result<Role::FinalResult, Error<Role>>;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        let mut s = self.as_mut().0.take().expect("future polled after completion");
+        let mut s = self
+            .as_mut()
+            .0
+            .take()
+            .expect("future polled after completion");
 
         let machine = s.get_mut();
         trace!("Setting context in handshake");

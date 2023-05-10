@@ -2,7 +2,7 @@ use std::str::FromStr;
 
 use serde::{Deserialize, Serialize};
 
-use axum::extract::ws::Message as WebSocketMessage;
+use tungstenite::protocol::Message as WebSocketMessage;
 
 use crate::auth::AuthConfig;
 

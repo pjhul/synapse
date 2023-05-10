@@ -1,7 +1,7 @@
 use std::{collections::HashMap, net::SocketAddr};
 
-use axum::extract::ws::Message as WebSocketMessage;
 use log::info;
+use tungstenite::protocol::Message as WebSocketMessage;
 
 use crate::message::Message;
 use crate::metrics::Metrics;

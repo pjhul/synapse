@@ -1,22 +1,19 @@
 use std::{net::SocketAddr, result::Result};
 
-use axum::extract::ws::{Message as WebSocketMessage, WebSocket};
-use axum::Error;
-
-use futures_util::future::select;
 use futures_util::stream::SplitSink;
-use futures_util::{pin_mut, SinkExt, StreamExt, TryStreamExt};
+use futures_util::{SinkExt, StreamExt, TryStreamExt};
 use log::{error, info, warn};
 use tokio::sync::mpsc::Receiver;
 use tokio::sync::mpsc::{channel, error::SendError, Sender};
 use tokio::task::JoinHandle;
-use tokio_tungstenite::tungstenite::Error as TungsteniteError;
+use tungstenite::{Error as TungsteniteError, Message as WebSocketMessage};
 
 use tokio_stream::wrappers::ReceiverStream;
 
 use crate::channel::router::{ChannelRouter, CommandResponse};
 use crate::message::Message;
 use crate::metrics::Metrics;
+use crate::ws::upgrade::WebSocket;
 
 pub type ConnectionSender = Sender<WebSocketMessage>;
 
@@ -159,25 +156,17 @@ impl Connection {
                 let result = writer.send(msg).await;
 
                 if let Err(e) = result {
-                    let inner_error = e.into_inner();
-
-                    let err = inner_error.downcast::<TungsteniteError>();
-
-                    if let Ok(err) = err {
-                        match *err {
-                            TungsteniteError::ConnectionClosed => {
-                                warn!("Connection has already been closed");
-                                // TODO: Stop listening when the connection is closed
-                                return;
-                            }
-                            // FIXME: We shouldn't close the connection on every error
-                            _ => {
-                                error!("Error sending message: {}", err);
-                                return;
-                            }
+                    match e {
+                        TungsteniteError::ConnectionClosed => {
+                            warn!("Connection has already been closed");
+                            // TODO: Stop listening when the connection is closed
+                            return;
                         }
-                    } else {
-                        error!("Received non-websocket error");
+                        // FIXME: We shouldn't close the connection on every error
+                        _ => {
+                            error!("Error sending message: {}", e);
+                            return;
+                        }
                     }
                 }
 

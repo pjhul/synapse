@@ -1538,7 +1538,10 @@ dependencies = [
 name = "synapse"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
  "axum",
+ "axum-core",
+ "base64 0.21.0",
  "bincode",
  "bytes",
  "console-subscriber",
@@ -1546,6 +1549,7 @@ dependencies = [
  "futures",
  "futures-channel",
  "futures-util",
+ "http",
  "hyper",
  "lazy_static",
  "log",
@@ -1554,9 +1558,9 @@ dependencies = [
  "rocksdb",
  "serde",
  "serde_json",
+ "sha1",
  "tokio",
  "tokio-stream",
- "tokio-tungstenite",
  "tracing",
  "tracing-subscriber",
  "tungstenite 0.19.0",
