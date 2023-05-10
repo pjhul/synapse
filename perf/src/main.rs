@@ -5,8 +5,8 @@ mod messages;
 mod connections;
 
 fn main() {
-    let url = "ws://192.168.122.1:8080/ws";
-    let max_connections = 500;
+    let url = "ws://172.17.0.1:8080/ws";
+    let max_connections = 1000;
     let step = 500;
 
     // Create a multi-threaded runtime for executing the tasks
