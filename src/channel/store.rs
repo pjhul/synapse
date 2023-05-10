@@ -51,11 +51,11 @@ impl ChannelStore {
                     }
                     Message::Disconnect => {
                         let conn = conn.unwrap();
-                        self.handle_disconnect(conn.clone())
+                        self.handle_disconnect(conn.clone()).await
                     }
                     Message::Broadcast { ref channel, body } => {
                         let conn = conn.unwrap();
-                        self.handle_broadcast(channel, body, conn.clone())
+                        self.handle_broadcast(channel, body, conn.clone()).await
                     }
                     Message::Error { message } => {
                         warn!("Received an error message: {}", message);
@@ -69,7 +69,7 @@ impl ChannelStore {
                 };
 
                 if let Some(result) = result {
-                    result.send(cmd_result).unwrap();
+                    let _ = result.send(cmd_result);
                 }
             }
         });
@@ -102,18 +102,23 @@ impl ChannelStore {
             }
         }
 
-        self.channels.add_connection(channel_name, conn)
+        self.channels.add_connection(channel_name, conn).await
     }
 
     fn handle_leave(&mut self, channel: &String, conn: Connection) -> CommandResult {
         self.channels.remove_connection(channel, conn.addr)
     }
 
-    fn handle_disconnect(&mut self, conn: Connection) -> CommandResult {
-        self.channels.remove_connection_from_all(conn.addr)
+    async fn handle_disconnect(&mut self, conn: Connection) -> CommandResult {
+        self.channels.remove_connection_from_all(conn.addr).await
     }
 
-    fn handle_broadcast(&mut self, channel: &str, body: Value, conn: Connection) -> CommandResult {
+    async fn handle_broadcast(
+        &mut self,
+        channel: &str,
+        body: Value,
+        conn: Connection,
+    ) -> CommandResult {
         let msg = Message::Broadcast {
             channel: channel.to_owned(),
             body,
@@ -121,6 +126,7 @@ impl ChannelStore {
 
         self.channels
             .broadcast(channel, msg.into(), Some(conn.addr))
+            .await
     }
 
     // Channel API handlers

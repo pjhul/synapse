@@ -84,7 +84,11 @@ impl<S: Storage> ChannelMap<S> {
         Ok(())
     }
 
-    pub fn add_connection(&mut self, channel_name: &String, conn: Connection) -> CommandResult {
+    pub async fn add_connection(
+        &mut self,
+        channel_name: &String,
+        conn: Connection,
+    ) -> CommandResult {
         if let Some(channel) = self.channels.get_mut(channel_name) {
             let connections = &mut channel.connections;
 
@@ -96,7 +100,7 @@ impl<S: Storage> ChannelMap<S> {
             info!("Added connection for {}", conn.addr);
             connections.insert(conn.addr, conn);
 
-            self.broadcast_presence(channel_name)?;
+            self.broadcast_presence(channel_name).await?;
 
             Ok(super::router::CommandResponse::Ok)
         } else {
@@ -117,7 +121,7 @@ impl<S: Storage> ChannelMap<S> {
         Ok(super::router::CommandResponse::Ok)
     }
 
-    pub fn remove_connection_from_all(&mut self, addr: SocketAddr) -> CommandResult {
+    pub async fn remove_connection_from_all(&mut self, addr: SocketAddr) -> CommandResult {
         let mut removed = Vec::new();
 
         // TODO: Rather than looping through all channels to remove the connection, have each
@@ -139,7 +143,7 @@ impl<S: Storage> ChannelMap<S> {
             // TODO: Don't `get` the channels twice if possible
             let channel = self.channels.get(&name).unwrap().clone();
 
-            self.broadcast_presence(&channel.name)?;
+            self.broadcast_presence(&channel.name).await?;
         }
 
         info!("Removed connection for {}", addr);
@@ -147,7 +151,7 @@ impl<S: Storage> ChannelMap<S> {
         Ok(super::router::CommandResponse::Ok)
     }
 
-    pub fn broadcast(
+    pub async fn broadcast(
         &mut self,
         channel_name: &str,
         message: WebSocketMessage,
@@ -163,7 +167,7 @@ impl<S: Storage> ChannelMap<S> {
                     }
                 }
 
-                if let Err(e) = sender.send(message.clone()) {
+                if let Err(e) = sender.send(message.clone()).await {
                     return Err(format!("Error sending message to {}: {}", addr, e));
                 }
             }
@@ -174,7 +178,7 @@ impl<S: Storage> ChannelMap<S> {
         }
     }
 
-    pub fn broadcast_presence(&mut self, channel_name: &str) -> CommandResult {
+    pub async fn broadcast_presence(&mut self, channel_name: &str) -> CommandResult {
         let channel = self.channels.get(channel_name).unwrap();
 
         if !channel.presence {
@@ -190,7 +194,7 @@ impl<S: Storage> ChannelMap<S> {
             connections: connections.map(|c| c.id.clone()).collect(),
         };
 
-        self.broadcast(channel_name, msg.into(), None)
+        self.broadcast(channel_name, msg.into(), None).await
     }
 }
 

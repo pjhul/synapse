@@ -5,16 +5,15 @@ use axum::extract::ws::{Message as WebSocketMessage, WebSocket};
 use futures_util::future::select;
 use futures_util::{pin_mut, StreamExt, TryStreamExt};
 use log::{error, warn};
-use tokio::sync::mpsc::unbounded_channel;
-use tokio::sync::mpsc::{error::SendError, UnboundedSender};
+use tokio::sync::mpsc::{channel, error::SendError, Sender};
 
-use tokio_stream::wrappers::UnboundedReceiverStream;
+use tokio_stream::wrappers::ReceiverStream;
 
 use crate::channel::router::{ChannelRouter, CommandResponse};
 use crate::message::Message;
 use crate::metrics::Metrics;
 
-pub type ConnectionSender = UnboundedSender<WebSocketMessage>;
+pub type ConnectionSender = Sender<WebSocketMessage>;
 
 #[derive(Clone, Debug)]
 pub struct Connection {
@@ -48,7 +47,7 @@ impl Connection {
         ws: WebSocket,
         channels: &ChannelRouter,
     ) -> Result<(), Box<dyn std::error::Error>> {
-        let (sender, receiver) = unbounded_channel::<WebSocketMessage>();
+        let (sender, receiver) = channel::<WebSocketMessage>(128);
         self.sender = Some(sender);
 
         self.increment_active_connections();
@@ -76,6 +75,7 @@ impl Connection {
                                     }
                                     .into(),
                                 )
+                                .await
                                 .unwrap();
 
                             return Ok(());
@@ -91,6 +91,7 @@ impl Connection {
 
                         self_clone
                             .send(Message::Error { message: e }.into())
+                            .await
                             .unwrap();
                     } else {
                         let result = result.unwrap();
@@ -98,6 +99,7 @@ impl Connection {
                         if let CommandResponse::Unauthorized(msg) = result {
                             self_clone
                                 .send(Message::Error { message: msg }.into())
+                                .await
                                 .unwrap();
                         }
                     }
@@ -111,7 +113,7 @@ impl Connection {
 
         // FIXME: We should have a periodic check that the connection is still alive
 
-        let receiver = UnboundedReceiverStream::new(receiver);
+        let receiver = ReceiverStream::new(receiver);
         let forward_outgoing = receiver.map(Ok).forward(write);
 
         pin_mut!(broadcast_incoming, forward_outgoing);
@@ -124,9 +126,9 @@ impl Connection {
         Ok(())
     }
 
-    pub fn send(&self, msg: WebSocketMessage) -> Result<(), SendError<WebSocketMessage>> {
+    pub async fn send(&self, msg: WebSocketMessage) -> Result<(), SendError<WebSocketMessage>> {
         if let Some(ref sender) = self.sender {
-            sender.send(msg)
+            sender.send(msg).await
         } else {
             warn!("Attempted to send a message to a connection that has no sender");
             Ok(())
