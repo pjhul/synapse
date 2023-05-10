@@ -16,6 +16,8 @@ pub async fn run_message_throughput_test(
     let done_flag = Arc::new(Mutex::new(false));
     let connection_failed_flag = Arc::new(AtomicBool::new(false));
 
+    // TODO: Create the 'throughput' channel here from the API
+
     println!("Testing with {} concurrent connections", total_connections);
 
     for _ in 0..total_connections {
@@ -39,14 +41,13 @@ pub async fn run_message_throughput_test(
                         .send(Message::Text(
                             "{ \"type\": \"join\", \"channel\": \"throughput\" }".to_string(),
                         ))
-                        .await;
+                        .await.unwrap();
 
-                    // !*done_flag_clone.lock().unwrap()
-                    while true {
+                    while !*done_flag_clone.lock().unwrap() {
                         // Optional: Sleep for a short duration to reduce CPU usage
                         tokio::time::sleep(Duration::from_millis(100)).await;
 
-                        write.send(Message::Text("{ \"type\": \"broadcast\", \"channel\": \"throughput\", \"body\": \"test\" }".to_string())).await;
+                        write.send(Message::Text("{ \"type\": \"broadcast\", \"channel\": \"throughput\", \"body\": \"test\" }".to_string())).await.unwrap();
                     }
 
                     ws_stream = write.reunite(read).unwrap();
@@ -64,13 +65,13 @@ pub async fn run_message_throughput_test(
             }
         });
 
-        tokio::time::sleep(Duration::from_millis(10)).await;
+        tokio::time::sleep(Duration::from_millis(100)).await;
     }
 
     tokio::time::sleep(Duration::from_secs(600)).await;
 
     // Signal the tasks to close their connections
-    // *done_flag.lock().unwrap() = true;
+    *done_flag.lock().unwrap() = true;
 
     println!("All connections closed.");
 

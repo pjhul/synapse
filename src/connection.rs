@@ -4,7 +4,7 @@ use axum::extract::ws::{Message as WebSocketMessage, WebSocket};
 
 use futures_util::future::select;
 use futures_util::{pin_mut, StreamExt, TryStreamExt};
-use log::{error, warn};
+use log::{error, warn, info};
 use tokio::sync::mpsc::{channel, error::SendError, Sender};
 
 use tokio_stream::wrappers::ReceiverStream;
@@ -47,7 +47,7 @@ impl Connection {
         ws: WebSocket,
         channels: &ChannelRouter,
     ) -> Result<(), Box<dyn std::error::Error>> {
-        let (sender, receiver) = channel::<WebSocketMessage>(128);
+        let (sender, receiver) = channel::<WebSocketMessage>(512);
         self.sender = Some(sender);
 
         self.increment_active_connections();
@@ -114,6 +114,8 @@ impl Connection {
         // FIXME: We should have a periodic check that the connection is still alive
 
         let receiver = ReceiverStream::new(receiver);
+
+        // FIXME: If the socket has been closed when we try and send, we should drop the connection here
         let forward_outgoing = receiver.map(Ok).forward(write);
 
         pin_mut!(broadcast_incoming, forward_outgoing);

@@ -161,19 +161,15 @@ impl<S: Storage> ChannelMap<S> {
         if let Some(channel) = self.channels.get(channel_name) {
             let connections = &channel.connections;
 
-            for (addr, sender) in connections.iter() {
-                if let Some(skip_addr) = skip_addr {
-                    if *addr == skip_addr {
-                        continue;
-                    }
-                }
+            let broadcast_tasks = connections.iter()
+                .filter(|(addr, _)| {
+                    skip_addr.is_some() && **addr == skip_addr.unwrap()
+                })
+                .map(|(_, sender)| {
+                    sender.send(message.clone())
+                });
 
-                self.increment_messages_sent();
-
-                if let Err(e) = sender.send(message.clone()).await {
-                    return Err(format!("Error sending message to {}: {}", addr, e));
-                }
-            }
+            let results = futures::future::join_all(broadcast_tasks).await;
 
             Ok(super::router::CommandResponse::Ok)
         } else {
@@ -181,6 +177,10 @@ impl<S: Storage> ChannelMap<S> {
         }
     }
 
+    // FIXME: When adding channels too quickly, this function seems to hang which causes incoming
+    // messages to back up.
+    // It probably makes sense to separate the logic for sending presence updates to de-couple it
+    // from big spikes in messages and vice-versa.
     pub async fn broadcast_presence(&mut self, channel_name: &str) -> CommandResult {
         let channel = self.channels.get(channel_name).unwrap();
 
@@ -205,8 +205,8 @@ impl<T: Storage> Metrics for ChannelMap<T> {}
 #[cfg(test)]
 mod tests {
     use futures_util::FutureExt;
-    use tokio::sync::mpsc::unbounded_channel;
-    use tokio_stream::{wrappers::UnboundedReceiverStream, StreamExt};
+    use tokio::sync::mpsc::channel;
+    use tokio_stream::{wrappers::ReceiverStream, StreamExt};
     use uuid::Uuid;
 
     use crate::channel::storage::tests::MockChannelStorage;
@@ -223,7 +223,7 @@ mod tests {
     }
 
     fn create_sender() -> ConnectionSender {
-        let (_tx, _rx) = unbounded_channel();
+        let (_tx, _rx) = channel(1);
         _tx
     }
 
@@ -261,6 +261,7 @@ mod tests {
 
         channel_map
             .add_connection(&channel_name, conn.clone())
+            .await
             .unwrap();
 
         let channels = channel_map.channels;
@@ -286,6 +287,7 @@ mod tests {
 
         channel_map
             .add_connection(&channel_name, conn.clone())
+            .await
             .unwrap();
 
         channel_map
@@ -315,9 +317,10 @@ mod tests {
 
         channel_map
             .add_connection(&channel_name, conn.clone())
+            .await
             .unwrap();
 
-        channel_map.remove_connection_from_all(conn.addr).unwrap();
+        channel_map.remove_connection_from_all(conn.addr).await.unwrap();
 
         let channels = channel_map.channels;
         let channel = channels.get(&channel_name).unwrap();
@@ -343,8 +346,8 @@ mod tests {
         let mut channel_map = create_channel_map();
         let channel_name = String::from("test_channel");
 
-        let (sender1, receiver1) = unbounded_channel();
-        let (sender2, receiver2) = unbounded_channel();
+        let (sender1, receiver1) = channel(1);
+        let (sender2, receiver2) = channel(1);
 
         let conn1 = Connection {
             id: Uuid::new_v4().to_string(),
@@ -368,17 +371,18 @@ mod tests {
             .unwrap()
             .disable_presence();
 
-        channel_map.add_connection(&channel_name, conn1).unwrap();
-        channel_map.add_connection(&channel_name, conn2).unwrap();
+        channel_map.add_connection(&channel_name, conn1).await.unwrap();
+        channel_map.add_connection(&channel_name, conn2).await.unwrap();
 
         let msg_text = "Hello, world!";
         let message = WebSocketMessage::Text(msg_text.to_owned());
         channel_map
             .broadcast(&channel_name, message.clone(), Some(skip_addr))
+            .await
             .unwrap();
 
-        let mut receiver1 = UnboundedReceiverStream::new(receiver1);
-        let mut receiver2 = UnboundedReceiverStream::new(receiver2);
+        let mut receiver1 = ReceiverStream::new(receiver1);
+        let mut receiver2 = ReceiverStream::new(receiver2);
 
         assert!(receiver1.next().now_or_never().is_none());
         let received_msg = receiver2.next().await.unwrap();

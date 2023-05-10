@@ -1,4 +1,4 @@
-use log::warn;
+use log::{warn, info};
 use serde_json::Value;
 use tokio::sync::mpsc::Receiver;
 
@@ -37,6 +37,8 @@ impl ChannelStore {
             while let Some(cmd) = self.receiver.recv().await {
                 let Command { msg, conn, result } = cmd;
 
+                info!("Received message: {:?}", msg);
+
                 let cmd_result: CommandResult = match msg.clone() {
                     Message::Join {
                         ref channel,
@@ -55,7 +57,9 @@ impl ChannelStore {
                     }
                     Message::Broadcast { ref channel, body } => {
                         let conn = conn.unwrap();
-                        self.handle_broadcast(channel, body, conn.clone()).await
+                        let result = self.handle_broadcast(channel, body, conn.clone()).await;
+
+                        result
                     }
                     Message::Error { message } => {
                         warn!("Received an error message: {}", message);
@@ -119,6 +123,8 @@ impl ChannelStore {
         body: Value,
         conn: Connection,
     ) -> CommandResult {
+        // return Ok(CommandResponse::Ok);
+
         let msg = Message::Broadcast {
             channel: channel.to_owned(),
             body,

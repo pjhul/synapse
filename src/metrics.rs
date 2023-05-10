@@ -1,8 +1,5 @@
 use lazy_static::lazy_static;
-use prometheus::{Counter, Gauge, IntCounter, IntGauge, Registry};
-use std::collections::HashMap;
-use std::sync::atomic::AtomicU64;
-use std::sync::Mutex;
+use prometheus::{IntCounter, IntGauge, Registry};
 
 pub trait Metrics {
     fn increment_active_connections(&self) {
